@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { FlowProgress, NextStepCard } from "@/components/flow-guidance";
 import { SetupNotice } from "@/components/setup-notice";
 import { createContractedEventFromQuote } from "@/app/eventos/actions";
 import { contractedEventStatusLabel } from "@/lib/domain/contracted-event";
@@ -158,6 +159,26 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
         )}
       </div>
 
+      <FlowProgress steps={quoteFlowSteps({ status: detail.status, hasItems: items.length > 0 || Boolean(selectedPackage), hasEvent: Boolean(contractedEvent) })} />
+
+      <NextStepCard
+        title={quoteNextStepTitle({ status: detail.status, hasItems: items.length > 0 || Boolean(selectedPackage), hasEvent: Boolean(contractedEvent) })}
+        description={quoteNextStepDescription({ status: detail.status, hasItems: items.length > 0 || Boolean(selectedPackage), hasEvent: Boolean(contractedEvent) })}
+        href={contractedEvent ? `/eventos/${contractedEvent.id}` : detail.status === "aprovado" ? undefined : `/orcamentos/${detail.id}/proposta`}
+        ctaLabel={detail.status === "enviado" ? "Abrir proposta" : contractedEvent ? "Abrir evento" : "Ver proposta"}
+        tone={contractedEvent ? "success" : detail.status === "aprovado" ? "warning" : "info"}
+        action={
+          detail.status === "aprovado" && !contractedEvent ? (
+            <form action={createContractedEventFromQuote}>
+              <input type="hidden" name="quoteId" value={detail.id} />
+              <button className="rounded-lg bg-[#18352d] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#23483d] active:scale-[0.99]">
+                Criar evento
+              </button>
+            </form>
+          ) : undefined
+        }
+      />
+
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <section className="space-y-6 lg:col-span-2">
           <section className="rounded-xl border border-[#dbe3dc] bg-white p-5">
@@ -307,6 +328,47 @@ function historyText(entry: QuoteHistory) {
     return `Status: ${from} → ${to}`;
   }
   return entry.action;
+}
+
+function quoteFlowSteps({ hasEvent, hasItems, status }: { hasEvent: boolean; hasItems: boolean; status: string }) {
+  return [
+    {
+      label: "Montagem",
+      description: hasItems ? "Pacote ou itens já adicionados." : "Adicione pacote e itens para formar o valor.",
+      status: hasItems ? ("done" as const) : ("current" as const),
+    },
+    {
+      label: "Proposta",
+      description: status === "enviado" || status === "aprovado" || hasEvent ? "Proposta já saiu do rascunho." : "Revise a proposta antes de enviar.",
+      status: status === "enviado" || status === "aprovado" || hasEvent ? ("done" as const) : hasItems ? ("current" as const) : ("pending" as const),
+    },
+    {
+      label: "Decisão",
+      description: status === "aprovado" ? "Cliente aprovou o orçamento." : status === "recusado" ? "Cliente recusou a proposta." : "Aguardando retorno do cliente.",
+      status: status === "aprovado" || status === "recusado" || hasEvent ? ("done" as const) : status === "enviado" ? ("current" as const) : ("pending" as const),
+    },
+    {
+      label: "Evento",
+      description: hasEvent ? "Evento operacional criado." : "Após aprovação, crie o evento.",
+      status: hasEvent ? ("done" as const) : status === "aprovado" ? ("current" as const) : ("pending" as const),
+    },
+  ];
+}
+
+function quoteNextStepTitle({ hasEvent, hasItems, status }: { hasEvent: boolean; hasItems: boolean; status: string }) {
+  if (hasEvent) return "Acompanhar o evento";
+  if (status === "aprovado") return "Transformar orçamento em evento";
+  if (status === "enviado") return "Acompanhar resposta do cliente";
+  if (!hasItems) return "Adicionar pacote ou itens";
+  return "Revisar proposta para cliente";
+}
+
+function quoteNextStepDescription({ hasEvent, hasItems, status }: { hasEvent: boolean; hasItems: boolean; status: string }) {
+  if (hasEvent) return "O orçamento já virou evento. Continue a operação pelo checklist, financeiro, fornecedores e ficha operacional.";
+  if (status === "aprovado") return "O orçamento foi aprovado. Agora crie o registro de evento para a equipe operacional acompanhar.";
+  if (status === "enviado") return "A proposta já foi enviada. Abra a proposta para consultar o material enviado ao cliente; quando houver retorno, registre aprovação, recusa ou ajustes no status do orçamento.";
+  if (!hasItems) return "Escolha um pacote principal ou adicione itens avulsos antes de enviar a proposta.";
+  return "Confira se pacote, itens, valores e textos estão corretos antes de compartilhar com o cliente.";
 }
 
 function firstRecord<T>(value: T[] | T | null | undefined) {

@@ -1,6 +1,7 @@
 ﻿import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { FlowProgress, NextStepCard } from "@/components/flow-guidance";
 import { SetupNotice } from "@/components/setup-notice";
 import { contractedEventBillingModelLabel, contractedEventContractStatusLabel, contractedEventPaymentStatusLabel, contractedEventStatusLabel, contractedEventVendorStatusLabel } from "@/lib/domain/contracted-event";
 import { formatCurrencyFromCents, quoteStatusLabel } from "@/lib/domain/quote";
@@ -151,6 +152,10 @@ export default async function EventDetailPage({
   const assigneeNames = new Map(assignees.map((profile) => [profile.id, profile.display_name ?? "Usuário"]));
   const operationalBrief = detail.contracted_event_documents?.find((document) => document.document_type === "ficha_operacional");
   const completedItems = checklist.filter((item) => item.is_done).length;
+  const hasPendingChecklist = checklist.some((item) => !item.is_done);
+  const hasVendors = vendors.length > 0;
+  const hasTimeline = timeline.length > 0;
+  const hasSignedContract = contract?.status === "assinado";
 
   return (
     <AppShell title={detail.title}>
@@ -170,6 +175,14 @@ export default async function EventDetailPage({
         )}
         <span className="rounded-full bg-[#edf5ee] px-3 py-1 text-sm text-[#356451]">{contractedEventStatusLabel(detail.status)}</span>
       </div>
+
+      <FlowProgress steps={eventFlowSteps({ hasPendingChecklist, hasSignedContract, hasTimeline, hasVendors })} />
+
+      <NextStepCard
+        title={eventNextStepTitle({ hasPendingChecklist, hasSignedContract, hasTimeline, hasVendors, openAmount })}
+        description={eventNextStepDescription({ hasPendingChecklist, hasSignedContract, hasTimeline, hasVendors, openAmount })}
+        tone={hasPendingChecklist || openAmount > 0 ? "warning" : "success"}
+      />
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <section className="space-y-6 lg:col-span-2">
@@ -387,6 +400,83 @@ function OperationalBriefModal({ eventId }: { eventId: string }) {
       </div>
     </div>
   );
+}
+
+function eventFlowSteps({
+  hasPendingChecklist,
+  hasSignedContract,
+  hasTimeline,
+  hasVendors,
+}: {
+  hasPendingChecklist: boolean;
+  hasSignedContract: boolean;
+  hasTimeline: boolean;
+  hasVendors: boolean;
+}) {
+  return [
+    {
+      label: "Contrato",
+      description: hasSignedContract ? "Contrato assinado." : "Confirme envio e assinatura.",
+      status: hasSignedContract ? ("done" as const) : ("current" as const),
+    },
+    {
+      label: "Equipe",
+      description: hasVendors ? "Fornecedores cadastrados." : "Cadastre fornecedores quando necessário.",
+      status: hasVendors ? ("done" as const) : hasSignedContract ? ("current" as const) : ("pending" as const),
+    },
+    {
+      label: "Cronograma",
+      description: hasTimeline ? "Cronograma iniciado." : "Organize horários e responsáveis.",
+      status: hasTimeline ? ("done" as const) : hasVendors ? ("current" as const) : ("pending" as const),
+    },
+    {
+      label: "Checklist",
+      description: hasPendingChecklist ? "Ainda há itens pendentes." : "Checklist concluído.",
+      status: hasPendingChecklist ? ("current" as const) : ("done" as const),
+    },
+  ];
+}
+
+function eventNextStepTitle({
+  hasPendingChecklist,
+  hasSignedContract,
+  hasTimeline,
+  hasVendors,
+  openAmount,
+}: {
+  hasPendingChecklist: boolean;
+  hasSignedContract: boolean;
+  hasTimeline: boolean;
+  hasVendors: boolean;
+  openAmount: number;
+}) {
+  if (!hasSignedContract) return "Conferir contrato";
+  if (openAmount > 0) return "Acompanhar pagamentos em aberto";
+  if (!hasVendors) return "Cadastrar fornecedores";
+  if (!hasTimeline) return "Montar cronograma";
+  if (hasPendingChecklist) return "Concluir checklist operacional";
+  return "Evento operacionalmente organizado";
+}
+
+function eventNextStepDescription({
+  hasPendingChecklist,
+  hasSignedContract,
+  hasTimeline,
+  hasVendors,
+  openAmount,
+}: {
+  hasPendingChecklist: boolean;
+  hasSignedContract: boolean;
+  hasTimeline: boolean;
+  hasVendors: boolean;
+  openAmount: number;
+}) {
+  if (!hasSignedContract) return "Atualize o status do contrato e registre observações importantes para a equipe.";
+  if (openAmount > 0) return "Revise os pagamentos previstos, vencidos ou pendentes antes da data do evento.";
+  if (!hasVendors) return "Inclua fornecedores e contatos para centralizar a operação do evento.";
+  if (!hasTimeline) return "Cadastre as etapas do dia do evento para orientar a equipe operacional.";
+  if (hasPendingChecklist) return "Finalize os itens pendentes do checklist para reduzir risco operacional.";
+  return "O evento já tem os principais blocos preenchidos. Use o histórico e a ficha operacional para acompanhamento.";
 }
 
 function Info({ label, value }: { label: string; value: string }) {

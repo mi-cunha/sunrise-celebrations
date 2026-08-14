@@ -31,6 +31,9 @@ export async function AppShell({ children, title }: { children: React.ReactNode;
             <Link href="/eventos" className="rounded-md px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10 hover:text-white">
               Eventos
             </Link>
+            <Link href="/resumo-semanal" className="rounded-md px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10 hover:text-white">
+              Resumo semanal
+            </Link>
             <details className="group relative">
               <summary
                 aria-label="Configurações"

@@ -88,7 +88,7 @@ export async function createQuoteFromLead(formData: FormData) {
   const { data: quoteId, error } = await supabase.rpc("create_quote_from_lead", {
     p_lead_id: parsed.data.leadId,
   });
-  if (error || !quoteId) redirect(parsed.data.returnTo || `/leads/${parsed.data.leadId}`);
+  if (error || !quoteId) redirect(`${parsed.data.returnTo || `/leads/${parsed.data.leadId}`}?error=quote_create_failed`);
 
   revalidatePath("/painel");
   revalidatePath("/atendimentos");
