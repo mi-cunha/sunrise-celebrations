@@ -68,7 +68,7 @@ export default async function OptionsAdminPage() {
       {error && <p className="mt-6 rounded-lg bg-red-50 p-3 text-sm text-red-800">A tabela de opções ainda não está disponível. Aplique a migration `202608120001_lead_option_catalog.sql`.</p>}
 
       <div className="mt-8 space-y-4">
-        <AdminSection title="Tipos de evento" description="Categorias usadas no cadastro do lead e no resumo do evento." count={eventTypes.length} defaultOpen>
+        <AdminSection id="opcoes" title="Tipos de evento" description="Categorias usadas no cadastro do lead e no resumo do evento." count={eventTypes.length} defaultOpen>
           <OptionForm kind="event_type" label="Novo tipo de evento" />
           <OptionAccordionList options={eventTypes} />
         </AdminSection>
@@ -87,7 +87,7 @@ export default async function OptionsAdminPage() {
           <QuoteItemCatalogAccordionList options={(quoteItemOptions ?? []) as QuoteItemCatalogOption[]} />
         </AdminSection>
 
-        <AdminSection title="Pacotes de evento" description="Pacotes como Entradinhas, Standard, Premium, Café completo ou Almoço executivo, com itens inclusos para proposta e operação." count={(eventPackages ?? []).length}>
+        <AdminSection id="pacotes" title="Pacotes de evento" description="Pacotes como Entradinhas, Standard, Premium, Café completo ou Almoço executivo, com itens inclusos para proposta e operação." count={(eventPackages ?? []).length}>
           <EventPackageForm eventTypes={eventTypes.map((option) => ({ name: option.name }))} />
           <EventPackageAccordionList packages={(eventPackages ?? []) as EventPackage[]} />
         </AdminSection>
@@ -106,16 +106,18 @@ function AdminSection({
   count,
   defaultOpen = false,
   description,
+  id,
   title,
 }: {
   children: ReactNode;
   count: number;
   defaultOpen?: boolean;
   description: string;
+  id?: string;
   title: string;
 }) {
   return (
-    <details open={defaultOpen} className="group overflow-hidden rounded-2xl border border-[#dbe3dc] bg-white shadow-sm transition hover:border-[#c8d6cf]">
+    <details id={id} open={defaultOpen} className="group scroll-mt-24 overflow-hidden rounded-2xl border border-[#dbe3dc] bg-white shadow-sm transition hover:border-[#c8d6cf]">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-4 bg-gradient-to-r from-white to-[#f7faf8] p-5 transition hover:from-[#fbf8f1] hover:to-white">
         <div>
           <h2 className="text-lg font-semibold">{title}</h2>
