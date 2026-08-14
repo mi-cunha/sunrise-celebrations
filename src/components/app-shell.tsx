@@ -1,5 +1,5 @@
-import Link from "next/link";
 import Image from "next/image";
+import Link from "next/link";
 import { signOut } from "@/app/painel/actions";
 import { createClient } from "@/lib/supabase/server";
 
@@ -15,14 +15,15 @@ export async function AppShell({ children, title }: { children: React.ReactNode;
   return (
     <main className="min-h-screen">
       <header className="border-b border-[#1d4f78] bg-[#092f4f] shadow-sm">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 py-4">
-          <Link href="/painel" className="flex min-h-10 items-center">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 py-3">
+          <Link href="/painel" className="flex items-center">
             {logoUrl ? (
-              <Image src={logoUrl} alt="Sunrise Celebrations" width={176} height={48} unoptimized className="h-auto max-h-12 w-auto max-w-44 object-contain" />
+              <Image src={logoUrl} alt="Sunrise Celebrations" width={360} height={100} unoptimized className="h-16 w-auto object-contain sm:h-20" />
             ) : (
               <span className="font-semibold tracking-[.16em] text-white">SUNRISE OS</span>
             )}
           </Link>
+
           <nav className="flex items-center gap-2">
             <Link href="/painel" className="rounded-md px-3 py-2 text-sm font-semibold text-white/90 hover:bg-white/10 hover:text-white">
               Painel
@@ -51,6 +52,7 @@ export async function AppShell({ children, title }: { children: React.ReactNode;
           </nav>
         </div>
       </header>
+
       <div className="mx-auto max-w-6xl px-5 py-8">
         <h1 className="text-3xl font-semibold">{title}</h1>
         {children}

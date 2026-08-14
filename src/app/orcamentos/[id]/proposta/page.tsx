@@ -115,7 +115,7 @@ export default async function QuoteProposalPage({ params }: { params: Promise<{ 
             <div className="relative">
               {companySettings?.logo_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={companySettings.logo_url} alt="Sunrise Celebrations" className="max-h-20 max-w-64 object-contain print:max-h-16" />
+                <img src={companySettings.logo_url} alt="Sunrise Celebrations" className="max-h-28 max-w-80 object-contain print:max-h-24 print:max-w-72" />
               ) : (
                 <p className="text-sm font-semibold tracking-[0.32em] text-[#b8d8f2]">SUNRISE CELEBRATIONS</p>
               )}
