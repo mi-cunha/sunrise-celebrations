@@ -370,7 +370,7 @@ export function VendorCard({ eventId, vendor }: { eventId: string; vendor: Vendo
             </div>
             <h3 className="mt-1 font-medium text-[#18352d]">{vendor.name}</h3>
             <div className="mt-2 flex flex-wrap gap-2 text-xs">
-              {vendor.contact_name && <Badge>Contato: {vendor.contact_name}</Badge>}
+              {vendor.contact_name && <Badge>Lead: {vendor.contact_name}</Badge>}
               {vendor.phone && <Badge>{vendor.phone}</Badge>}
               {vendor.email && <Badge>{vendor.email}</Badge>}
             </div>
@@ -681,7 +681,7 @@ function ChecklistFields({
   return (
     <div className="grid gap-4">
       <div>
-        <label htmlFor={item ? `title-${item.id}` : "new-title"}>Tarefa</label>
+        <label htmlFor={item ? `title-${item.id}` : "new-title"}>Pendência</label>
         <input id={item ? `title-${item.id}` : "new-title"} name="title" required defaultValue={values?.title ?? item?.title ?? ""} className={fieldErrors.title ? "border-red-500 bg-red-50" : ""} />
         {fieldErrors.title?.[0] && <p className="mt-1 text-sm text-red-700">{fieldErrors.title[0]}</p>}
       </div>
@@ -796,7 +796,7 @@ function VendorFields({
       </div>
       <div className="grid gap-4 md:grid-cols-3">
         <div>
-          <label htmlFor={vendor ? `vendor-contact-${vendor.id}` : "new-vendor-contact"}>Contato</label>
+          <label htmlFor={vendor ? `vendor-contact-${vendor.id}` : "new-vendor-contact"}>Lead</label>
           <input id={vendor ? `vendor-contact-${vendor.id}` : "new-vendor-contact"} name="contactName" defaultValue={values?.contactName ?? vendor?.contact_name ?? ""} placeholder="Pessoa responsável" className={fieldErrors.contactName ? "border-red-500 bg-red-50" : ""} />
           {fieldErrors.contactName?.[0] && <p className="mt-1 text-sm text-red-700">{fieldErrors.contactName[0]}</p>}
         </div>

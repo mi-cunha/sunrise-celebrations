@@ -35,8 +35,8 @@ export function LeadDetailEditForm({
   const fieldErrors = state.fieldErrors ?? {};
 
   return (
-    <details className="rounded-xl border border-[#dbe3dc] bg-white p-5">
-      <summary className="cursor-pointer font-semibold text-[#18352d]">Editar dados do lead</summary>
+    <details className="rounded-lg border border-[#dbe3dc] bg-white p-4">
+      <summary className="cursor-pointer font-semibold text-[#083653]">Editar dados do contato</summary>
       <form key={state.version ?? "lead-detail-edit-initial"} action={action} className="mt-5 grid gap-4 md:grid-cols-2">
         <input type="hidden" name="leadId" value={lead.id} />
 
@@ -102,7 +102,7 @@ export function LeadDetailEditForm({
 
         <div className="md:col-span-2">
           <button disabled={pending} className="rounded-lg bg-[#18352d] px-5 py-3 font-semibold text-white transition hover:bg-[#23483d] active:scale-[0.99] disabled:opacity-60">
-            {pending ? "Salvando..." : "Salvar dados do lead"}
+            {pending ? "Salvando..." : "Salvar dados do contato"}
           </button>
         </div>
       </form>

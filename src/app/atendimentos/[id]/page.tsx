@@ -179,7 +179,7 @@ export default async function ConversationDetailPage({ params, searchParams }: {
           <SidebarToggle title="Lead" defaultOpen>
             <dl className="mt-4 space-y-3 text-sm">
               <div>
-                <dt className="text-slate-500">Contato</dt>
+                <dt className="text-slate-500">Lead</dt>
                 <dd>{detail.leads?.phone}</dd>
               </div>
               <div>
@@ -340,7 +340,7 @@ function MessageBubble({ message }: { message: Message }) {
   const config = messageStyle(message.author);
   return (
     <li className={`flex ${config.align}`}>
-      <article className={`max-w-[92%] rounded-2xl border p-4 shadow-sm lg:max-w-[78%] ${config.className}`}>
+      <article className={`max-w-[92%] rounded-lg border p-3 lg:max-w-[78%] ${config.className}`}>
         <div className="flex flex-wrap items-center gap-2">
           <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${config.badgeClassName}`}>{config.label}</span>
           {message.profiles?.display_name && <span className="text-xs text-slate-500">{message.profiles.display_name}</span>}
@@ -358,7 +358,7 @@ function messageStyle(author: string) {
   if (author === "cliente") {
     return {
       align: "justify-start",
-      label: "Cliente",
+      label: "Contato",
       className: "border-[#dbe3dc] bg-white",
       badgeClassName: "bg-slate-100 text-slate-700",
     };

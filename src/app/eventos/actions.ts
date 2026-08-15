@@ -112,7 +112,7 @@ export async function addContractedEventChecklistItem(_: ContractedEventFormStat
   if (error) return { error: error.message, values: raw, version: Date.now() };
 
   revalidatePath(`/eventos/${parsed.data.eventId}`);
-  return { success: "Tarefa adicionada.", version: Date.now() };
+  return { success: "Pendência adicionada.", version: Date.now() };
 }
 
 export async function updateContractedEventChecklistItem(_: ContractedEventFormState, formData: FormData): Promise<ContractedEventFormState> {
@@ -138,7 +138,7 @@ export async function updateContractedEventChecklistItem(_: ContractedEventFormS
   if (error) return { error: error.message, values: raw, version: Date.now() };
 
   revalidatePath(`/eventos/${eventId ?? parsed.data.eventId}`);
-  return { success: "Tarefa atualizada.", version: Date.now() };
+  return { success: "Pendência atualizada.", version: Date.now() };
 }
 
 export async function removeContractedEventChecklistItem(_: ContractedEventFormState, formData: FormData): Promise<ContractedEventFormState> {
@@ -155,7 +155,7 @@ export async function removeContractedEventChecklistItem(_: ContractedEventFormS
   if (error) return { error: error.message, version: Date.now() };
 
   revalidatePath(`/eventos/${eventId ?? parsed.data.eventId}`);
-  return { success: "Tarefa removida.", version: Date.now() };
+  return { success: "Pendência removida.", version: Date.now() };
 }
 
 export async function moveContractedEventChecklistItem(_: ContractedEventFormState, formData: FormData): Promise<ContractedEventFormState> {

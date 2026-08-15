@@ -131,7 +131,7 @@ export default async function QuoteProposalPage({ params }: { params: Promise<{ 
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#1f5f8b]">Cliente</p>
               <h2 className="mt-2 text-2xl font-semibold">{detail.leads?.name ?? "Cliente"}</h2>
               {detail.leads?.company && <p className="mt-1 text-slate-600">{detail.leads.company}</p>}
-              <p className="mt-1 text-slate-600">{detail.leads?.phone ?? "Contato não informado"}</p>
+              <p className="mt-1 text-slate-600">{detail.leads?.phone ?? "Lead não informado"}</p>
             </div>
             <div className="rounded-2xl bg-[#f3f8fc] p-5">
               <p className="text-sm text-slate-500">Orçamento</p>

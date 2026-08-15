@@ -1,12 +1,69 @@
 @import "tailwindcss";
 
-:root { --ink: #18352d; --paper: #fcfaf5; --sun: #e8a849; --leaf: #4c7a64; }
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--paper); color: var(--ink); font-family: Arial, Helvetica, sans-serif; }
-input, select, textarea, button { font: inherit; }
-input, select, textarea { width: 100%; border: 1px solid #ccd5ce; border-radius: .65rem; padding: .65rem .75rem; background: white; }
-input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible { outline: 3px solid #e8a849; outline-offset: 2px; }
-label { display: block; font-size: .9rem; font-weight: 600; margin-bottom: .35rem; }
+:root {
+  --sunrise-navy: #083653;
+  --sunrise-blue: #0f5f8f;
+  --sunrise-sky: #dcecf6;
+  --sunrise-cream: #f7f4ed;
+  --sunrise-card: #fffdf8;
+  --sunrise-border: #d9ded8;
+  --sunrise-text: #092f38;
+  --sunrise-muted: #5f7180;
+  --sunrise-success: #2f7d62;
+  --sunrise-warning: #b7791f;
+  --sunrise-danger: #b54747;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--sunrise-cream);
+  color: var(--sunrise-text);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid var(--sunrise-border);
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  background: white;
+  color: var(--sunrise-text);
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--sunrise-blue);
+  outline-offset: 2px;
+}
+
+label {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: var(--sunrise-text);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
 
 @page {
   size: A4;
@@ -14,7 +71,8 @@ label { display: block; font-size: .9rem; font-weight: 600; margin-bottom: .35re
 }
 
 @media print {
-  html, body {
+  html,
+  body {
     background: white !important;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;

@@ -73,7 +73,7 @@ export default async function WeeklySummaryPage() {
 
   return (
     <AppShell title="Resumo semanal">
-      <section className="mt-6 rounded-2xl border border-[#c5d7e5] bg-[#f7fbff] p-6">
+      <section className="mt-4 rounded-lg border border-[#c5d7e5] bg-[#f7fbff] p-4">
         <p className="text-sm font-semibold uppercase tracking-[.16em] text-[#28608f]">Semana atual</p>
         <h2 className="mt-2 text-2xl font-semibold text-[#092f4f]">
           {formatDate(start)} a {formatDate(end)}
@@ -83,14 +83,14 @@ export default async function WeeklySummaryPage() {
         </p>
       </section>
 
-      <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Eventos na semana" value={eventRows.length} />
         <MetricCard label="Checklist pendente" value={eventsWithPendingChecklist.length} />
         <MetricCard label="Propostas enviadas" value={sentQuotes.length} />
-        <MetricCard label={canSeeFinancial ? "Pagamentos atrasados" : "Leads novos"} value={canSeeFinancial ? latePayments.length : leadRows.length} />
+        <MetricCard label={canSeeFinancial ? "Pagamentos atrasados" : "Contatos novos"} value={canSeeFinancial ? latePayments.length : leadRows.length} />
       </section>
 
-      <section className="mt-6 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+      <section className="mt-4 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <SummarySection title="Eventos da semana" empty="Nenhum evento com data nesta semana.">
           {eventRows.map((event) => {
             const checklist = event.contracted_event_checklist ?? [];
@@ -103,7 +103,7 @@ export default async function WeeklySummaryPage() {
                     <p className="mt-1 text-sm text-slate-600">
                       {event.event_date ? formatDate(event.event_date) : "Sem data"} · {event.event_type ?? "Evento"} · {event.guest_count ?? "?"} convidados
                     </p>
-                    <p className="mt-1 text-sm text-slate-500">{event.leads?.name ?? "Cliente não informado"}</p>
+                    <p className="mt-1 text-sm text-slate-500">{event.leads?.name ?? "Contato não informado"}</p>
                   </div>
                   <div className="flex flex-wrap gap-2 sm:justify-end">
                     <Badge>{contractedEventStatusLabel(event.status)}</Badge>
@@ -117,7 +117,7 @@ export default async function WeeklySummaryPage() {
           })}
         </SummarySection>
 
-        <SummarySection title="Novos leads da semana" empty="Nenhum lead novo nesta semana.">
+        <SummarySection title="Novos contatos da semana" empty="Nenhum contato novo nesta semana.">
           {leadRows.map((lead) => (
             <Link key={lead.id} href={`/leads/${lead.id}`} className="block border-b border-[#edf1ee] p-4 last:border-0 hover:bg-[#f7fbff]">
               <h3 className="font-semibold text-[#18352d]">{lead.name}</h3>
@@ -130,7 +130,7 @@ export default async function WeeklySummaryPage() {
         </SummarySection>
       </section>
 
-      <section className="mt-6 grid gap-6 xl:grid-cols-2">
+      <section className="mt-4 grid gap-4 xl:grid-cols-2">
         <SummarySection title="Propostas para acompanhar" empty="Nenhuma proposta enviada ou em elaboração.">
           {[...sentQuotes, ...draftQuotes].slice(0, 10).map((quote) => (
             <Link key={quote.id} href={`/orcamentos/${quote.id}`} className="block border-b border-[#edf1ee] p-4 last:border-0 hover:bg-[#f7fbff]">
@@ -138,7 +138,7 @@ export default async function WeeklySummaryPage() {
                 <div>
                   <h3 className="font-semibold text-[#18352d]">{quote.title}</h3>
                   <p className="mt-1 text-sm text-slate-600">
-                    {quote.leads?.name ?? "Lead"} · {quoteStatusLabel(quote.status)}
+                    {quote.leads?.name ?? "Contato"} · {quoteStatusLabel(quote.status)}
                   </p>
                 </div>
                 <span className="font-semibold text-[#18352d]">{formatCurrencyFromCents(quote.total_amount_cents)}</span>
@@ -178,7 +178,7 @@ export default async function WeeklySummaryPage() {
 
 function MetricCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-2xl border border-[#dbe3dc] bg-white p-5">
+    <div className="rounded-lg border border-[#dbe3dc] bg-white p-4">
       <p className="text-sm text-slate-500">{label}</p>
       <p className="mt-2 text-3xl font-semibold text-[#092f4f]">{value}</p>
     </div>
@@ -188,11 +188,11 @@ function MetricCard({ label, value }: { label: string; value: number }) {
 function SummarySection({ children, empty, title }: { children: React.ReactNode[] | React.ReactNode; empty: string; title: string }) {
   const hasChildren = Array.isArray(children) ? children.length > 0 : Boolean(children);
   return (
-    <section className="overflow-hidden rounded-2xl border border-[#dbe3dc] bg-white">
-      <div className="border-b border-[#edf1ee] p-5">
+    <section className="overflow-hidden rounded-lg border border-[#dbe3dc] bg-white">
+      <div className="border-b border-[#edf1ee] p-4">
         <h2 className="text-lg font-semibold text-[#092f4f]">{title}</h2>
       </div>
-      {hasChildren ? children : <p className="p-5 text-sm text-slate-600">{empty}</p>}
+      {hasChildren ? children : <p className="p-4 text-sm text-slate-600">{empty}</p>}
     </section>
   );
 }

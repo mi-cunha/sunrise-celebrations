@@ -70,7 +70,7 @@ export default async function LeadDetail({
       </Link>
 
       {errorCode === "quote_create_failed" && (
-        <p className="mt-4 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-800">
+        <p className="mt-4 rounded-lg border border-red-100 bg-red-50 p-4 text-sm text-red-800">
           Não foi possível criar o orçamento. Confira suas permissões ou tente novamente.
         </p>
       )}
@@ -100,9 +100,9 @@ export default async function LeadDetail({
         }
       />
 
-      <div className="mt-6 grid gap-6 md:grid-cols-3">
-        <section className="space-y-6 md:col-span-2">
-          <section className="rounded-xl border border-[#dbe3dc] bg-white p-5">
+      <div className="mt-4 grid gap-4 md:grid-cols-3">
+        <section className="space-y-4 md:col-span-2">
+          <section className="rounded-lg border border-[#dbe3dc] bg-white p-4">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h2 className="font-semibold">Contato e evento</h2>
@@ -131,8 +131,8 @@ export default async function LeadDetail({
 
           {canManage && <LeadDetailEditForm lead={lead} eventTypes={safeEventTypes} leadSources={safeLeadSources} />}
 
-          <section className="overflow-hidden rounded-xl border border-[#dbe3dc] bg-white">
-            <div className="border-b border-[#edf1ee] p-5">
+          <section className="overflow-hidden rounded-lg border border-[#dbe3dc] bg-white">
+            <div className="border-b border-[#edf1ee] p-4">
               <h2 className="font-semibold">Orçamentos</h2>
             </div>
             {quotes.length ? (
@@ -152,15 +152,15 @@ export default async function LeadDetail({
                 ))}
               </ul>
             ) : (
-              <div className="p-8">
+              <div className="p-4">
                 <h3 className="font-semibold">Ainda não há orçamentos.</h3>
-                <p className="mt-1 text-slate-600">Crie o primeiro orçamento quando o lead estiver qualificado.</p>
+                <p className="mt-1 text-slate-600">Crie o primeiro orçamento quando o contato estiver qualificado.</p>
               </div>
             )}
           </section>
         </section>
 
-        <aside className="rounded-xl border border-[#dbe3dc] bg-white p-5">
+        <aside className="rounded-lg border border-[#dbe3dc] bg-white p-4">
           <h2 className="font-semibold">Histórico</h2>
           {history.length ? (
             <ol className="mt-4 space-y-4">
@@ -193,7 +193,7 @@ function Info({ label, value }: { label: string; value: string }) {
 
 function leadFlowSteps({ hasEvent, hasQuote, quoteStatus }: { hasEvent: boolean; hasQuote: boolean; quoteStatus?: string }) {
   return [
-    { label: "Lead", description: "Contato cadastrado e dados principais reunidos.", status: "done" as const },
+    { label: "Lead", description: "Lead cadastrado e dados principais reunidos.", status: "done" as const },
     {
       label: "Orçamento",
       description: hasQuote ? `Existe orçamento em status ${quoteStatusLabel(quoteStatus ?? "")}.` : "Próximo passo: criar orçamento.",
@@ -236,8 +236,8 @@ function formatLeadStatus(status: string) {
     orcamento_em_elaboracao: "Orçamento em elaboração",
     proposta_enviada: "Proposta enviada",
     negociacao: "Negociação",
-    ganho: "Ganho",
-    perdido: "Perdido",
+    ganho: "Evento fechado",
+    perdido: "Não avançou",
   };
   return labels[status] ?? status.replaceAll("_", " ");
 }

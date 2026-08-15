@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { FlowProgress, NextStepCard } from "@/components/flow-guidance";
@@ -129,7 +129,7 @@ export default async function EventDetailPage({
   if (error) {
     return (
       <AppShell title="Evento indisponível">
-        <p className="mt-6 rounded-lg bg-red-50 p-3 text-sm text-red-800">Não foi possível carregar o evento: {error.message}</p>
+        <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">Não foi possível carregar o evento: {error.message}</p>
       </AppShell>
     );
   }
@@ -161,7 +161,7 @@ export default async function EventDetailPage({
     <AppShell title={detail.title}>
       <div className="mt-2 flex flex-wrap items-center gap-3">
         <Link href="/eventos" className="text-sm font-semibold text-[#356451] underline">
-          ← Voltar aos eventos
+          ? Voltar aos eventos
         </Link>
         {detail.leads && (
           <Link href={`/leads/${detail.leads.id}`} className="text-sm font-semibold text-[#356451] underline">
@@ -184,10 +184,10 @@ export default async function EventDetailPage({
         tone={hasPendingChecklist || openAmount > 0 ? "warning" : "success"}
       />
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        <section className="space-y-6 lg:col-span-2">
-          <section className="rounded-xl border border-[#dbe3dc] bg-white p-5">
-            <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+        <section className="space-y-4 lg:col-span-2">
+          <section className="rounded-lg border border-[#dbe3dc] bg-white p-4">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <div>
                 <h2 className="font-semibold">Resumo do evento</h2>
                 <dl className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -201,7 +201,7 @@ export default async function EventDetailPage({
                 </dl>
               </div>
               {detail.quotes && (
-                <div className="rounded-xl bg-[#f6fbf7] p-4 text-right">
+                <div className="rounded-lg bg-[#f6fbf7] p-4 text-right">
                   <p className="text-sm text-slate-500">Investimento aprovado</p>
                   <p className="mt-1 text-3xl font-semibold text-[#18352d]">{formatCurrencyFromCents(detail.quotes.total_amount_cents)}</p>
                   <p className="mt-1 text-xs text-slate-500">Orçamento {quoteStatusLabel(detail.quotes.status)}</p>
@@ -209,7 +209,7 @@ export default async function EventDetailPage({
               )}
             </div>
             {["consumo_aberto_pos_evento", "pre_pago_com_consumo_aberto"].includes(detail.billing_model) && (
-              <div className="mt-5 rounded-xl border border-[#e8d7a9] bg-[#fffaf0] p-4 text-sm text-[#8a5a12]">
+              <div className="mt-5 rounded-lg border border-[#e8d7a9] bg-[#fffaf0] p-4 text-sm text-[#8a5a12]">
                 <p className="font-semibold">{detail.billing_model === "pre_pago_com_consumo_aberto" ? "Evento com pré-pago + consumo aberto." : "Evento com consumo aberto - pagamento pós-evento."}</p>
                 <p className="mt-1">{detail.billing_model === "pre_pago_com_consumo_aberto" ? "Parte dos serviços pode ser paga antecipadamente, e consumos variáveis serão apurados e cobrados após o evento." : "O cliente pode reservar o espaço sem cobrança antecipada; o consumo será apurado e cobrado após o evento."}</p>
                 {detail.billing_notes && <p className="mt-2 whitespace-pre-wrap">{detail.billing_notes}</p>}
@@ -219,7 +219,7 @@ export default async function EventDetailPage({
           </section>
 
           {canManageFinancials && (
-            <section className="rounded-xl border border-[#dbe3dc] bg-white p-5">
+            <section className="rounded-lg border border-[#dbe3dc] bg-white p-4">
               <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div>
                   <h2 className="font-semibold">Contrato e pagamentos</h2>
@@ -232,12 +232,12 @@ export default async function EventDetailPage({
                 </div>
               </div>
 
-              <div className="mt-5 grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+              <div className="mt-5 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
                 <div className="space-y-5">
                   <BillingModelForm billing={{ billing_model: detail.billing_model, billing_notes: detail.billing_notes }} eventId={detail.id} />
                   <ContractForm contract={contract ?? undefined} eventId={detail.id} />
                 </div>
-                <div className="rounded-xl border border-[#dbe3dc] bg-white p-5">
+                <div className="rounded-lg border border-[#dbe3dc] bg-white p-4">
                   <h3 className="font-semibold">Pagamentos</h3>
                   {payments.length ? (
                     <div className="mt-4 space-y-3">
@@ -255,7 +255,7 @@ export default async function EventDetailPage({
             </section>
           )}
 
-          <section className="rounded-xl border border-[#dbe3dc] bg-white p-5">
+          <section className="rounded-lg border border-[#dbe3dc] bg-white p-4">
             <div>
               <h2 className="font-semibold">Cronograma operacional</h2>
               <p className="mt-1 text-sm text-slate-600">Organize horários, locais, responsáveis e observações do dia do evento.</p>
@@ -278,10 +278,10 @@ export default async function EventDetailPage({
             {canManageEvents && <TimelineEntryForm eventId={detail.id} assignees={assignees} />}
           </section>
 
-          <section className="rounded-xl border border-[#dbe3dc] bg-white p-5">
+          <section className="rounded-lg border border-[#dbe3dc] bg-white p-4">
             <div>
               <h2 className="font-semibold">Fornecedores</h2>
-              <p className="mt-1 text-sm text-slate-600">Registre fornecedores operacionais, contatos e status de confirmação.</p>
+              <p className="mt-1 text-sm text-slate-600">Registre fornecedores operacionais, leads e status de confirmação.</p>
             </div>
             {vendors.length ? (
               <div className="mt-5 space-y-3">
@@ -295,7 +295,7 @@ export default async function EventDetailPage({
             {canManageEvents && <VendorForm eventId={detail.id} />}
           </section>
 
-          <section className="rounded-xl border border-[#dbe3dc] bg-white p-5">
+          <section className="rounded-lg border border-[#dbe3dc] bg-white p-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="font-semibold">Checklist operacional</h2>
@@ -327,7 +327,7 @@ export default async function EventDetailPage({
             {canManageEvents && <ChecklistItemForm eventId={detail.id} assignees={assignees} />}
           </section>
 
-          <section className="rounded-xl border border-[#dbe3dc] bg-white p-5">
+          <section className="rounded-lg border border-[#dbe3dc] bg-white p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h2 className="font-semibold">Documentos operacionais</h2>
@@ -336,7 +336,7 @@ export default async function EventDetailPage({
               {canManageEvents && <OperationalBriefForm eventId={detail.id} hasDocument={Boolean(operationalBrief)} />}
             </div>
             {operationalBrief ? (
-              <div className="mt-5 flex flex-col gap-3 rounded-xl border border-[#edf1ee] bg-[#fbf8f1] p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mt-5 flex flex-col gap-3 rounded-lg border border-[#edf1ee] bg-[#fbf8f1] p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="font-semibold text-[#18352d]">{operationalBrief.title}</p>
                   <p className="mt-1 text-sm text-slate-600">Atualizada em {formatDateTime(operationalBrief.updated_at)}</p>
@@ -354,7 +354,7 @@ export default async function EventDetailPage({
         <aside className="space-y-5">
           {canManageEvents && <ContractedEventStatusForm eventId={detail.id} status={detail.status} />}
 
-          <section className="rounded-xl border border-[#dbe3dc] bg-white p-5">
+          <section className="rounded-lg border border-[#dbe3dc] bg-white p-4">
             <h2 className="font-semibold">Histórico do evento</h2>
             {history.length ? (
               <ol className="mt-4 space-y-4">
@@ -381,7 +381,7 @@ export default async function EventDetailPage({
 function OperationalBriefModal({ eventId }: { eventId: string }) {
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/55 p-4">
-      <div className="mx-auto flex h-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+      <div className="mx-auto flex h-full max-w-6xl flex-col overflow-hidden rounded-lg bg-white ">
         <div className="flex items-center justify-between gap-3 border-b border-[#dbe3dc] px-4 py-3">
           <div>
             <p className="font-semibold text-[#18352d]">Ficha operacional</p>
@@ -473,7 +473,7 @@ function eventNextStepDescription({
 }) {
   if (!hasSignedContract) return "Atualize o status do contrato e registre observações importantes para a equipe.";
   if (openAmount > 0) return "Revise os pagamentos previstos, vencidos ou pendentes antes da data do evento.";
-  if (!hasVendors) return "Inclua fornecedores e contatos para centralizar a operação do evento.";
+  if (!hasVendors) return "Inclua fornecedores e leads para centralizar a operação do evento.";
   if (!hasTimeline) return "Cadastre as etapas do dia do evento para orientar a equipe operacional.";
   if (hasPendingChecklist) return "Finalize os itens pendentes do checklist para reduzir risco operacional.";
   return "O evento já tem os principais blocos preenchidos. Use o histórico e a ficha operacional para acompanhamento.";
@@ -490,7 +490,7 @@ function Info({ label, value }: { label: string; value: string }) {
 
 function FinanceBadge({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl bg-[#f6fbf7] px-4 py-3 text-right">
+    <div className="rounded-lg bg-[#f6fbf7] px-4 py-3 text-right">
       <p className="text-xs text-slate-500">{label}</p>
       <p className="mt-1 font-semibold text-[#18352d]">{value}</p>
     </div>
@@ -509,9 +509,9 @@ function historyText(entry: EventHistory) {
   if (entry.action === "Status do evento alterado") {
     const from = typeof entry.metadata.from === "string" ? contractedEventStatusLabel(entry.metadata.from) : "status anterior";
     const to = typeof entry.metadata.to === "string" ? contractedEventStatusLabel(entry.metadata.to) : "novo status";
-    return `Status: ${from} → ${to}`;
+    return `Status: ${from} ? ${to}`;
   }
-  if (entry.action === "Checklist concluído" || entry.action === "Checklist concluÃ­do" || entry.action === "Checklist reaberto") {
+  if (entry.action === "Checklist concluído" || entry.action === "Checklist concluído" || entry.action === "Checklist reaberto") {
     const title = typeof entry.metadata.title === "string" ? `: ${entry.metadata.title}` : "";
     return `${entry.action}${title}`;
   }

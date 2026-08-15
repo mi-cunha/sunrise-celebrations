@@ -38,8 +38,8 @@ export default async function OptionsAdminPage() {
   if (!permissions.includes("admin_owner")) {
     return (
       <AppShell title="Acesso restrito">
-        <p className="mt-4 text-slate-600">Apenas administradores podem gerenciar opções.</p>
-        <Link href="/painel" className="mt-6 inline-block text-sm font-semibold text-[#356451] underline">
+        <p className="mt-3 text-sm text-[#5f7180]">Apenas administradores podem gerenciar configurações.</p>
+        <Link href="/painel" className="mt-4 inline-block text-sm font-semibold text-[#0f5f8f] underline">
           Voltar ao painel
         </Link>
       </AppShell>
@@ -63,36 +63,36 @@ export default async function OptionsAdminPage() {
   const companySettings = settings as CompanySettings | null;
 
   return (
-    <AppShell title="Opções do cadastro">
-      <p className="mt-2 max-w-2xl text-slate-600">Padronize os seletores, os itens de orçamento, os pacotes de evento e os blocos que podem entrar na proposta comercial.</p>
-      {error && <p className="mt-6 rounded-lg bg-red-50 p-3 text-sm text-red-800">A tabela de opções ainda não está disponível. Aplique a migration `202608120001_lead_option_catalog.sql`.</p>}
+    <AppShell title="Configurações">
+      <p className="mt-1 text-sm text-[#5f7180]">Padrões usados em leads, orçamentos, propostas e eventos.</p>
+      {error && <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-[#b54747]">Tabela de opções indisponível. Confira as migrations.</p>}
 
-      <div className="mt-8 space-y-4">
-        <AdminSection id="opcoes" title="Tipos de evento" description="Categorias usadas no cadastro do lead e no resumo do evento." count={eventTypes.length} defaultOpen>
-          <OptionForm kind="event_type" label="Novo tipo de evento" />
+      <div className="mt-4 space-y-2">
+        <AdminSection id="opcoes" title="Tipos de evento" count={eventTypes.length} defaultOpen>
+          <OptionForm kind="event_type" label="Novo tipo" />
           <OptionAccordionList options={eventTypes} />
         </AdminSection>
 
-        <AdminSection title="Origens" description="Canais de entrada para padronizar a origem dos leads." count={leadSources.length}>
+        <AdminSection title="Origens" count={leadSources.length}>
           <OptionForm kind="lead_source" label="Nova origem" />
           <OptionAccordionList options={leadSources} />
         </AdminSection>
 
-        <AdminSection title="Marca da proposta" description="Logo fixa usada na proposta enviada ao cliente." count={companySettings?.logo_url ? 1 : 0}>
+        <AdminSection title="Marca" count={companySettings?.logo_url ? 1 : 0}>
           <CompanyLogoForm logoUrl={companySettings?.logo_url ?? ""} />
         </AdminSection>
 
-        <AdminSection title="Itens/serviços do orçamento" description="Opções como Buffet completo, DJ, Bar de drinks e outros serviços recorrentes." count={(quoteItemOptions ?? []).length}>
+        <AdminSection title="Itens de orçamento" count={(quoteItemOptions ?? []).length}>
           <QuoteItemCatalogOptionForm />
           <QuoteItemCatalogAccordionList options={(quoteItemOptions ?? []) as QuoteItemCatalogOption[]} />
         </AdminSection>
 
-        <AdminSection id="pacotes" title="Pacotes de evento" description="Pacotes como Entradinhas, Standard, Premium, Café completo ou Almoço executivo, com itens inclusos para proposta e operação." count={(eventPackages ?? []).length}>
+        <AdminSection id="pacotes" title="Pacotes" count={(eventPackages ?? []).length}>
           <EventPackageForm eventTypes={eventTypes.map((option) => ({ name: option.name }))} />
           <EventPackageAccordionList packages={(eventPackages ?? []) as EventPackage[]} />
         </AdminSection>
 
-        <AdminSection title="Condições e textos da proposta" description="Validade, pagamento, observações comerciais, inclusões ou condições adicionais." count={(proposalOptions ?? []).length}>
+        <AdminSection title="Textos da proposta" count={(proposalOptions ?? []).length}>
           <ProposalOptionForm />
           <ProposalOptionAccordionList options={(proposalOptions ?? []) as ProposalOption[]} />
         </AdminSection>
@@ -105,30 +105,25 @@ function AdminSection({
   children,
   count,
   defaultOpen = false,
-  description,
   id,
   title,
 }: {
   children: ReactNode;
   count: number;
   defaultOpen?: boolean;
-  description: string;
   id?: string;
   title: string;
 }) {
   return (
-    <details id={id} open={defaultOpen} className="group scroll-mt-24 overflow-hidden rounded-2xl border border-[#dbe3dc] bg-white shadow-sm transition hover:border-[#c8d6cf]">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 bg-gradient-to-r from-white to-[#f7faf8] p-5 transition hover:from-[#fbf8f1] hover:to-white">
-        <div>
-          <h2 className="text-lg font-semibold">{title}</h2>
-          <p className="mt-1 text-sm text-slate-600">{description}</p>
-        </div>
-        <div className="flex shrink-0 items-center gap-3">
-          <span className="rounded-full bg-[#edf5ee] px-3 py-1 text-sm font-semibold text-[#356451]">{count}</span>
-          <span className="grid h-9 w-9 place-items-center rounded-full border border-[#dbe3dc] text-lg text-[#356451] transition group-open:rotate-180">⌄</span>
+    <details id={id} open={defaultOpen} className="group scroll-mt-20 overflow-hidden rounded-lg border border-[#d9ded8] bg-[#fffdf8]">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 hover:bg-[#dcecf6]/45">
+        <h2 className="text-sm font-semibold uppercase tracking-[0.08em] text-[#083653]">{title}</h2>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="rounded-md bg-[#dcecf6] px-2 py-1 text-xs font-semibold text-[#083653]">{count}</span>
+          <span className="text-sm text-[#5f7180] transition group-open:rotate-180">⌄</span>
         </div>
       </summary>
-      <div className="border-t border-[#edf1ee] p-5">{children}</div>
+      <div className="border-t border-[#d9ded8] p-3">{children}</div>
     </details>
   );
 }

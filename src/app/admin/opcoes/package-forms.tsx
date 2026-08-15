@@ -42,7 +42,7 @@ export function EventPackageForm({ eventTypes }: { eventTypes: EventTypeOption[]
   const [state, action, pending] = useActionState(createEventPackage, packageInitialState);
 
   return (
-    <form action={action} className="rounded-xl border border-[#dbe3dc] bg-[#fbf8f1] p-4">
+    <form action={action} className="rounded-lg border border-[#dbe3dc] bg-[#fbf8f1] p-4">
       <h3 className="font-semibold">Novo pacote</h3>
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <div>
@@ -98,7 +98,7 @@ export function EventPackageAccordionList({ packages }: { packages: EventPackage
     <ul className="mt-5 space-y-3">
       {packages.map((eventPackage) => (
         <li key={eventPackage.id}>
-          <details className="rounded-xl border border-[#dbe3dc] bg-[#fbf8f1]">
+          <details className="rounded-lg border border-[#dbe3dc] bg-[#fbf8f1]">
             <summary className="cursor-pointer list-none p-4 transition hover:bg-[#f6f0e5]">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
@@ -131,7 +131,7 @@ function PackageItemForm({ packageId }: { packageId: string }) {
   const [state, action, pending] = useActionState(createEventPackageItem, itemInitialState);
 
   return (
-    <form action={action} className="rounded-xl bg-white p-4">
+    <form action={action} className="rounded-lg bg-white p-4">
       <h4 className="font-semibold">Adicionar item incluso</h4>
       <input type="hidden" name="packageId" value={packageId} />
       <PackageItemFields packageId={packageId} state={state} />
@@ -164,7 +164,7 @@ function PackageItemAccordion({ item, packageId }: { item: PackageItem; packageI
 
   return (
     <li>
-      <details className="rounded-xl border border-[#edf1ee] bg-white">
+      <details className="rounded-lg border border-[#edf1ee] bg-white">
         <summary className="cursor-pointer list-none p-4 transition hover:bg-[#f6f0e5]">
           <div className="grid gap-2 md:grid-cols-[120px_1fr_180px]">
             <span className="text-sm font-semibold text-[#356451]">{categoryLabel(item.category)}</span>
@@ -244,7 +244,7 @@ function PackageItemFields({ item, packageId, state }: { item?: PackageItem; pac
 
 function InfoBox({ content, title }: { content: string; title: string }) {
   return (
-    <div className="rounded-xl bg-white p-4">
+    <div className="rounded-lg bg-white p-4">
       <p className="text-sm font-semibold">{title}</p>
       <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{content}</p>
     </div>

@@ -119,7 +119,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
   if (error) {
     return (
       <AppShell title="Orçamento indisponível">
-        <p className="mt-6 rounded-lg bg-red-50 p-3 text-sm text-red-800">Não foi possível carregar o orçamento: {error.message}</p>
+        <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">Não foi possível carregar o orçamento: {error.message}</p>
       </AppShell>
     );
   }
@@ -179,9 +179,9 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
         }
       />
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        <section className="space-y-6 lg:col-span-2">
-          <section className="rounded-xl border border-[#dbe3dc] bg-white p-5">
+      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+        <section className="space-y-4 lg:col-span-2">
+          <section className="rounded-lg border border-[#dbe3dc] bg-white p-4">
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <div>
                 <h2 className="font-semibold">Resumo</h2>
@@ -191,7 +191,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
                     <dd>{detail.leads?.name ?? "Lead"}</dd>
                   </div>
                   <div>
-                    <dt className="text-sm text-slate-500">Contato</dt>
+                    <dt className="text-sm text-slate-500">Lead</dt>
                     <dd>{detail.leads?.phone}</dd>
                   </div>
                   <div>
@@ -208,7 +208,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
                   </div>
                 </dl>
               </div>
-              <div className="rounded-xl bg-[#f6fbf7] p-4 text-right">
+              <div className="rounded-lg bg-[#f6fbf7] p-4 text-right">
                 <p className="text-sm text-slate-500">Total</p>
                 <p className="mt-1 text-3xl font-semibold text-[#18352d]">{formatCurrencyFromCents(detail.total_amount_cents)}</p>
               </div>
@@ -232,8 +232,8 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
             selectedPackage={selectedPackage ?? undefined}
           />
 
-          <section className="overflow-hidden rounded-xl border border-[#dbe3dc] bg-white">
-            <div className="border-b border-[#edf1ee] p-5">
+          <section className="overflow-hidden rounded-lg border border-[#dbe3dc] bg-white">
+            <div className="border-b border-[#edf1ee] p-4">
               <h2 className="font-semibold">Itens</h2>
             </div>
             {items.length ? (
@@ -243,7 +243,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
                 ))}
               </ul>
             ) : (
-              <div className="p-8">
+              <div className="p-4">
                 <h3 className="font-semibold">Nenhum item adicionado.</h3>
                 <p className="mt-1 text-slate-600">Adicione os serviços/produtos para calcular o total do orçamento.</p>
               </div>
@@ -251,7 +251,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
           </section>
 
           {canManageQuotes && isApprovedLocked && (
-            <p className="rounded-xl border border-[#dbe3dc] bg-slate-50 p-4 text-sm text-slate-700">Este orçamento foi aprovado e está protegido. Peça a um admin para liberar edição, se necessário.</p>
+            <p className="rounded-lg border border-[#dbe3dc] bg-slate-50 p-4 text-sm text-slate-700">Este orçamento foi aprovado e está protegido. Peça a um admin para liberar edição, se necessário.</p>
           )}
           {canEditQuote && <QuoteItemForm quoteId={detail.id} catalogItems={(quoteItemCatalogOptions ?? []) as QuoteItemCatalogOption[]} />}
 
@@ -262,7 +262,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
           {canManageQuotes && <QuoteStatusForm quoteId={detail.id} status={detail.status} decisionReason={detail.decision_reason ?? ""} />}
           {isAdminOwner && detail.status === "aprovado" && <QuoteEditLockForm quoteId={detail.id} unlocked={detail.admin_edit_unlocked} />}
           {detail.status === "aprovado" && (
-            <section className="rounded-xl border border-[#dbe3dc] bg-white p-5">
+            <section className="rounded-lg border border-[#dbe3dc] bg-white p-4">
               <h2 className="font-semibold">Evento contratado</h2>
               {contractedEvent ? (
                 <>
@@ -285,7 +285,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
             </section>
           )}
 
-          <section className="rounded-xl border border-[#dbe3dc] bg-white p-5">
+          <section className="rounded-lg border border-[#dbe3dc] bg-white p-4">
             <h2 className="font-semibold">Histórico do orçamento</h2>
             {history.length ? (
               <ol className="mt-4 space-y-4">

@@ -44,7 +44,7 @@ export function CompanyLogoForm({ logoUrl }: { logoUrl: string }) {
       </div>
       {fileError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{fileError}</p>}
       {currentLogo && (
-        <div className="rounded-xl border border-[#dbe3dc] bg-[#fbf8f1] p-4">
+        <div className="rounded-lg border border-[#dbe3dc] bg-[#fbf8f1] p-4">
           <p className="mb-2 text-sm font-semibold text-slate-600">Prévia</p>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={currentLogo} alt="Logo cadastrada" className="max-h-20 max-w-56 object-contain" />

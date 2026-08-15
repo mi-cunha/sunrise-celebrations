@@ -30,7 +30,7 @@ export function LeadStatusForm({ conversationId, lead }: { conversationId: strin
       <input type="hidden" name="leadId" value={lead.id} />
       <input type="hidden" name="conversationId" value={conversationId} />
       <div className="mt-4">
-        <label htmlFor="lead-status">Etapa do funil</label>
+        <label htmlFor="lead-status">Etapa da jornada</label>
         <select id="lead-status" name="status" defaultValue={lead.status}>
           {leadStatuses.map((status) => (
             <option key={status} value={status}>
@@ -65,7 +65,7 @@ export function LeadQuickEditForm({
 
   return (
     <details className="rounded-xl border border-[#dbe3dc] bg-white p-5">
-      <summary className="cursor-pointer font-semibold text-[#18352d]">Editar dados do lead</summary>
+      <summary className="cursor-pointer font-semibold text-[#083653]">Editar dados do contato</summary>
       <form key={state.version ?? "lead-edit-initial"} action={action} className="mt-5 space-y-4">
         <input type="hidden" name="leadId" value={lead.id} />
         <input type="hidden" name="conversationId" value={conversationId} />
@@ -130,7 +130,7 @@ export function LeadQuickEditForm({
         {state.error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{state.error}</p>}
         {state.success && <p role="status" className="rounded-lg bg-[#edf5ee] p-3 text-sm text-[#356451]">{state.success}</p>}
         <button disabled={pending} className="rounded-lg bg-[#18352d] px-5 py-3 font-semibold text-white transition hover:bg-[#23483d] active:scale-[0.99] disabled:opacity-60">
-          {pending ? "Salvando..." : "Salvar dados do lead"}
+          {pending ? "Salvando..." : "Salvar dados do contato"}
         </button>
       </form>
     </details>

@@ -36,7 +36,7 @@ function OptionAccordionItem({ option }: { option: Option }) {
 
   return (
     <li>
-      <details className="rounded-xl border border-[#dbe3dc] bg-[#fbf8f1]">
+      <details className="rounded-lg border border-[#dbe3dc] bg-[#fbf8f1]">
         <summary className="cursor-pointer list-none p-4 font-semibold transition hover:bg-[#f6f0e5]">{option.name}</summary>
         <div className="border-t border-[#dbe3dc] p-4">
           <form action={updateAction} className="space-y-3">
@@ -81,7 +81,7 @@ function ProposalOptionAccordionItem({ option }: { option: ProposalOption }) {
 
   return (
     <li>
-      <details className="rounded-xl border border-[#dbe3dc] bg-[#fbf8f1]">
+      <details className="rounded-lg border border-[#dbe3dc] bg-[#fbf8f1]">
         <summary className="cursor-pointer list-none p-4 transition hover:bg-[#f6f0e5]">
           <p className="font-semibold">{option.title}</p>
           <p className="mt-1 text-sm font-normal text-slate-600">{option.content}</p>
@@ -134,7 +134,7 @@ function QuoteItemCatalogAccordionItem({ option }: { option: QuoteItemCatalogOpt
 
   return (
     <li>
-      <details className="rounded-xl border border-[#dbe3dc] bg-[#fbf8f1]">
+      <details className="rounded-lg border border-[#dbe3dc] bg-[#fbf8f1]">
         <summary className="cursor-pointer list-none p-4 transition hover:bg-[#f6f0e5]">
           <p className="font-semibold">{option.name}</p>
           <p className="mt-1 text-sm font-normal text-slate-600">

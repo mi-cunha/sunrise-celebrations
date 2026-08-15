@@ -3,7 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { SetupNotice } from "@/components/setup-notice";
 import { requireUser } from "@/lib/auth";
 import { canManageLeads } from "@/lib/domain/lead";
-import { formatCurrencyFromCents, quoteStatusLabel } from "@/lib/domain/quote";
+import { formatCurrencyFromCents } from "@/lib/domain/quote";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 
 type LeadRow = {
@@ -40,414 +40,202 @@ type EventRow = {
   status: string;
   event_date: string | null;
   guest_count: number | null;
-  quotes: { total_amount_cents: number } | null;
   contracted_event_checklist: { id: string; is_done: boolean }[];
-  contracted_event_contracts: { id: string; status: string }[] | { id: string; status: string } | null;
   contracted_event_payments: { id: string; status: string; amount_cents: number; due_date: string | null }[];
-};
-
-type ActionItem = {
-  title: string;
-  description: string;
-  href: string;
-  label: string;
-  tone: "danger" | "warning" | "info" | "success";
 };
 
 export default async function Dashboard() {
   if (!hasSupabaseConfig()) return <SetupNotice />;
 
   const { supabase, permissions } = await requireUser();
-  const allowed = canManageLeads(permissions);
+  const canCreateContact = canManageLeads(permissions);
   const canSeeFinancial = permissions.some((permission) => permission === "financeiro" || permission === "gerencia" || permission === "admin_owner");
-  const isAdmin = permissions.includes("admin_owner");
 
   const [{ data: leads }, { data: conversations }, { data: quotes }, { data: events }] = await Promise.all([
     supabase.from("leads").select("id,name,company,phone,status,created_at").order("created_at", { ascending: false }).limit(8),
-    supabase
-      .from("conversations")
-      .select("id,status,needs_human,created_at,leads(name,phone)")
-      .order("created_at", { ascending: false })
-      .limit(40),
-    supabase
-      .from("quotes")
-      .select("id,title,status,total_amount_cents,approved_at,created_at,leads(name),contracted_events(id)")
-      .order("created_at", { ascending: false })
-      .limit(40),
+    supabase.from("conversations").select("id,status,needs_human,created_at,leads(name,phone)").order("created_at", { ascending: false }).limit(20),
+    supabase.from("quotes").select("id,title,status,total_amount_cents,approved_at,created_at,leads(name),contracted_events(id)").order("created_at", { ascending: false }).limit(30),
     supabase
       .from("contracted_events")
-      .select("id,title,status,event_date,guest_count,quotes(total_amount_cents),contracted_event_checklist(id,is_done),contracted_event_contracts(id,status),contracted_event_payments(id,status,amount_cents,due_date)")
+      .select("id,title,status,event_date,guest_count,contracted_event_checklist(id,is_done),contracted_event_payments(id,status,amount_cents,due_date)")
       .order("event_date", { ascending: true, nullsFirst: false })
-      .limit(40),
+      .limit(30),
   ]);
 
-  const recentLeads = (leads ?? []) as unknown as LeadRow[];
-  const conversationRows = (conversations ?? []) as unknown as ConversationRow[];
+  const recentContacts = (leads ?? []) as unknown as LeadRow[];
+  const conversationsRows = (conversations ?? []) as unknown as ConversationRow[];
   const quoteRows = (quotes ?? []) as unknown as QuoteRow[];
   const eventRows = (events ?? []) as unknown as EventRow[];
-
   const today = new Date().toISOString().slice(0, 10);
-  const humanQueue = conversationRows.filter((conversation) => conversation.status !== "encerrado" && (conversation.needs_human || conversation.status === "aguardando_humano"));
-  const quotesInProgress = quoteRows.filter((quote) => quote.status === "rascunho" || quote.status === "em_elaboracao");
-  const sentQuotes = quoteRows.filter((quote) => quote.status === "enviado");
-  const approvedQuotesWaitingEvent = quoteRows.filter((quote) => quote.status === "aprovado" && !quote.contracted_events?.length);
-  const activeEvents = eventRows.filter((event) => !["realizado", "cancelado"].includes(event.status));
-  const eventsWithChecklistPending = activeEvents.filter((event) => event.contracted_event_checklist?.some((item) => !item.is_done));
-  const eventsWithLatePayments = activeEvents.filter((event) => event.contracted_event_payments?.some((payment) => payment.status === "atrasado" || (payment.status === "previsto" && payment.due_date && payment.due_date < today)));
+  const weekEnd = weekEndKey();
 
-  const nextActions = buildNextActions({
-    quotesInProgress,
-    sentQuotes,
-    approvedQuotesWaitingEvent,
-    eventsWithChecklistPending,
-    eventsWithLatePayments,
-    canSeeFinancial,
-  });
+  const humanQueue = conversationsRows.filter((conversation) => conversation.status !== "encerrado" && (conversation.needs_human || conversation.status === "aguardando_humano"));
+  const openQuotes = quoteRows.filter((quote) => quote.status === "rascunho" || quote.status === "em_elaboracao");
+  const sentQuotes = quoteRows.filter((quote) => quote.status === "enviado");
+  const approvedWithoutEvent = quoteRows.filter((quote) => quote.status === "aprovado" && !quote.contracted_events?.length);
+  const activeEvents = eventRows.filter((event) => !["realizado", "cancelado"].includes(event.status));
+  const weekEvents = activeEvents.filter((event) => event.event_date && event.event_date >= today && event.event_date <= weekEnd);
+  const checklistPending = activeEvents.filter((event) => event.contracted_event_checklist?.some((item) => !item.is_done));
+  const financialPending = activeEvents.filter((event) =>
+    event.contracted_event_payments?.some((payment) => payment.status === "atrasado" || (payment.status === "previsto" && payment.due_date && payment.due_date < today)),
+  );
 
   return (
     <AppShell title="Painel">
-      <section className="mt-8 rounded-2xl border border-[#dbe3dc] bg-gradient-to-br from-[#f7fbff] via-white to-[#f8f2e8] p-6">
-        <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr] lg:items-center">
+      <section className="mt-4 rounded-lg border border-[#d9ded8] bg-[#fffdf8] p-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[.18em] text-[#28608f]">Central de trabalho</p>
-            <h2 className="mt-3 text-2xl font-semibold text-[#092f4f]">Comece pelo que precisa de decisão hoje.</h2>
-            <p className="mt-2 max-w-2xl text-slate-600">
-              O painel organiza atendimentos, orçamentos e eventos em uma fila simples de prioridades para a equipe não precisar caçar informação entre páginas.
-            </p>
+            <h2 className="text-base font-semibold text-[#092f38]">Prioridades da operação</h2>
+            <p className="text-sm text-[#5f7180]">Atendimentos, orçamentos, eventos e pendências.</p>
           </div>
-          <div className="flex flex-wrap gap-3 lg:justify-end">
-            <QuickLink href="/eventos" label="Ver eventos" />
-            {allowed && <QuickLink href="/leads/novo" label="Novo lead" primary />}
-          </div>
-        </div>
-      </section>
-
-      <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4" aria-label="Resumo operacional">
-        <MetricCard label="Precisam de humano" value={humanQueue.length} tone={humanQueue.length > 0 ? "danger" : "success"} />
-        <MetricCard label="Orçamentos em preparo" value={quotesInProgress.length} href="/painel#orcamentos" tone="info" />
-        <MetricCard label="Aprovados sem evento" value={approvedQuotesWaitingEvent.length} href="/eventos" tone={approvedQuotesWaitingEvent.length > 0 ? "warning" : "success"} />
-        <MetricCard
-          label={canSeeFinancial ? "Pagamentos atrasados" : "Eventos com pendências"}
-          value={canSeeFinancial ? eventsWithLatePayments.length : eventsWithChecklistPending.length}
-          href="/eventos"
-          tone={(canSeeFinancial ? eventsWithLatePayments.length : eventsWithChecklistPending.length) > 0 ? "danger" : "success"}
-        />
-      </section>
-
-      <section className="mt-6 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-        <div className="rounded-2xl border border-[#dbe3dc] bg-white">
-          <div className="border-b border-[#edf1ee] p-5">
-            <h2 className="text-lg font-semibold text-[#092f4f]">Próximas ações</h2>
-            <p className="mt-1 text-sm text-slate-600">Uma lista curta para orientar o começo do dia.</p>
-          </div>
-          {nextActions.length ? (
-            <ul className="divide-y divide-[#edf1ee]">
-              {nextActions.map((action) => (
-                <li key={`${action.href}-${action.title}`}>
-                  <Link href={action.href} className="group flex flex-col gap-3 p-5 transition hover:bg-[#f7fbff] sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <StatusPill tone={action.tone}>{action.label}</StatusPill>
-                        <h3 className="font-semibold text-[#18352d] group-hover:underline">{action.title}</h3>
-                      </div>
-                      <p className="mt-2 text-sm text-slate-600">{action.description}</p>
-                    </div>
-                    <span className="text-sm font-semibold text-[#28608f]">Abrir →</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="p-8">
-              <h3 className="font-semibold text-[#18352d]">Tudo sob controle por aqui.</h3>
-              <p className="mt-1 text-sm text-slate-600">Nenhuma ação urgente apareceu nos atendimentos, orçamentos ou eventos ativos.</p>
-            </div>
-          )}
-        </div>
-
-        <aside className="rounded-2xl border border-[#dbe3dc] bg-white p-5">
-          <h2 className="text-lg font-semibold text-[#092f4f]">Fluxo recomendado</h2>
-          <p className="mt-1 text-sm text-slate-600">Use esta sequência como mapa mental do sistema.</p>
-          <ol className="mt-5 space-y-3">
-            <WorkflowStep number="1" title="Cadastrar" description="Registre o lead e complete os dados necessários para orçamento." href="/leads/novo" />
-            <WorkflowStep number="2" title="Orçar" description="Monte o orçamento com pacote, itens extras e proposta para cliente." href="/painel#orcamentos" />
-            <WorkflowStep number="3" title="Converter" description="Quando aprovado, transforme o orçamento em evento operacional." href="/eventos" />
-            <WorkflowStep number="4" title="Operar" description="Controle checklist, cronograma, fornecedores, contrato e pagamentos." href="/eventos" />
-          </ol>
-        </aside>
-      </section>
-
-      <section id="orcamentos" className="mt-6 grid gap-6 lg:grid-cols-2">
-        <QueueCard
-          title="Orçamentos em andamento"
-          description="Propostas que ainda estão sendo montadas ou aguardam envio."
-          emptyTitle="Nenhum orçamento em elaboração."
-          emptyDescription="Quando um lead virar orçamento, ele aparecerá aqui."
-          items={quotesInProgress.slice(0, 5).map((quote) => ({
-            href: `/orcamentos/${quote.id}`,
-            title: quote.title,
-            description: `${quote.leads?.name ?? "Lead"} · ${quoteStatusLabel(quote.status)} · ${formatCurrencyFromCents(quote.total_amount_cents)}`,
-          }))}
-        />
-        <QueueCard
-          title="Propostas enviadas"
-          description="Orçamentos já enviados e aguardando resposta do cliente."
-          emptyTitle="Nenhuma proposta aguardando cliente."
-          emptyDescription="Assim que uma proposta for enviada, ela entra nesta fila."
-          items={sentQuotes.slice(0, 5).map((quote) => ({
-            href: `/orcamentos/${quote.id}`,
-            title: quote.title,
-            description: `${quote.leads?.name ?? "Lead"} · ${formatCurrencyFromCents(quote.total_amount_cents)}`,
-          }))}
-        />
-      </section>
-
-      <section className="mt-6 overflow-hidden rounded-2xl border border-[#dbe3dc] bg-white">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#edf1ee] p-5">
-          <div>
-            <h2 className="text-lg font-semibold text-[#092f4f]">Leads recentes</h2>
-            <p className="mt-1 text-sm text-slate-600">Últimos contatos cadastrados no sistema.</p>
-          </div>
-          {allowed && (
-            <Link href="/leads/novo" className="rounded-lg bg-[#18352d] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#23483d]">
-              Novo lead
+          {canCreateContact && (
+            <Link href="/leads/novo" className="rounded-md bg-[#083653] px-3 py-2 text-sm font-semibold text-white hover:bg-[#0f5f8f]">
+              Novo contato
             </Link>
           )}
         </div>
-        {recentLeads.length ? (
-          <ul className="divide-y divide-[#edf1ee]">
-            {recentLeads.map((lead) => (
-              <li key={lead.id}>
-                <Link href={`/leads/${lead.id}`} className="flex flex-col gap-3 p-4 transition hover:bg-[#f6fbf7] sm:flex-row sm:items-center sm:justify-between">
+      </section>
+
+      <section className="mt-3 grid gap-2 md:grid-cols-3 xl:grid-cols-5" aria-label="Métricas operacionais">
+        <Metric label="Aguardando humano" value={humanQueue.length} tone={humanQueue.length ? "danger" : "neutral"} />
+        <Metric label="Orçamentos abertos" value={openQuotes.length} />
+        <Metric label="Propostas enviadas" value={sentQuotes.length} />
+        <Metric label="Eventos da semana" value={weekEvents.length} />
+        <Metric label={canSeeFinancial ? "Pendências financeiras" : "Pendências"} value={canSeeFinancial ? financialPending.length : checklistPending.length} tone={(canSeeFinancial ? financialPending.length : checklistPending.length) ? "warning" : "neutral"} />
+      </section>
+
+      <section className="mt-4 grid gap-3 xl:grid-cols-[1fr_1fr]">
+        <PanelList
+          title="Fila de atendimento"
+          empty="Nenhum contato aguardando humano."
+          items={humanQueue.slice(0, 5).map((conversation) => ({
+            href: `/atendimentos/${conversation.id}`,
+            title: conversation.leads?.name ?? "Contato sem nome",
+            meta: conversation.leads?.phone ?? "Sem telefone",
+          }))}
+        />
+
+        <PanelList
+          title="Orçamentos em andamento"
+          empty="Nenhum orçamento aberto."
+          items={openQuotes.slice(0, 5).map((quote) => ({
+            href: `/orcamentos/${quote.id}`,
+            title: quote.title,
+            meta: `${quote.leads?.name ?? "Contato"} · ${formatCurrencyFromCents(quote.total_amount_cents)}`,
+          }))}
+        />
+
+        <PanelList
+          title="Eventos próximos"
+          empty="Nenhum evento próximo."
+          items={weekEvents.slice(0, 5).map((event) => ({
+            href: `/eventos/${event.id}`,
+            title: event.title,
+            meta: `${event.event_date ? formatDate(event.event_date) : "Sem data"} · ${event.guest_count ?? "?"} convidados`,
+          }))}
+        />
+
+        <PanelList
+          title="Pendências críticas"
+          empty="Nenhuma pendência crítica."
+          items={[
+            ...approvedWithoutEvent.slice(0, 3).map((quote) => ({
+              href: "/eventos",
+              title: "Criar evento",
+              meta: quote.title,
+            })),
+            ...(canSeeFinancial ? financialPending : checklistPending).slice(0, 3).map((event) => ({
+              href: `/eventos/${event.id}`,
+              title: event.title,
+              meta: canSeeFinancial ? "Pagamento pendente/atrasado" : "Checklist pendente",
+            })),
+          ].slice(0, 5)}
+        />
+      </section>
+
+      <section className="mt-3 rounded-lg border border-[#d9ded8] bg-[#fffdf8]">
+        <div className="flex items-center justify-between border-b border-[#d9ded8] px-3 py-2">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.08em] text-[#083653]">Contatos recentes</h2>
+          {canCreateContact && (
+            <Link href="/leads/novo" className="text-sm font-semibold text-[#0f5f8f] hover:underline">
+              Novo contato
+            </Link>
+          )}
+        </div>
+        {recentContacts.length ? (
+          <ul className="divide-y divide-[#d9ded8]">
+            {recentContacts.map((contact) => (
+              <li key={contact.id}>
+                <Link href={`/leads/${contact.id}`} className="grid gap-1 px-3 py-2 hover:bg-[#dcecf6]/45 sm:grid-cols-[1fr_auto] sm:items-center">
                   <div>
-                    <h3 className="font-semibold text-[#18352d]">{lead.name}</h3>
-                    <p className="text-sm text-slate-600">{lead.company ? `${lead.company} · ${lead.phone}` : lead.phone}</p>
+                    <p className="font-semibold text-[#092f38]">{contact.name}</p>
+                    <p className="text-sm text-[#5f7180]">{contact.company ? `${contact.company} · ${contact.phone}` : contact.phone}</p>
                   </div>
-                  <StatusPill tone="info">{formatLeadStatus(lead.status)}</StatusPill>
+                  <StatusPill>{formatContactStatus(contact.status)}</StatusPill>
                 </Link>
               </li>
             ))}
           </ul>
         ) : (
-          <div className="p-8">
-            <h3 className="font-semibold">Ainda não há leads.</h3>
-            <p className="mt-1 text-slate-600">{allowed ? "Cadastre o primeiro contato para iniciar o funil." : "Quando a equipe cadastrar contatos, eles aparecerão aqui."}</p>
-          </div>
+          <p className="px-3 py-3 text-sm text-[#5f7180]">Nenhum contato cadastrado.</p>
         )}
-      </section>
-
-      <section className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4" aria-label="Atalhos do sistema">
-        <ShortcutCard href="/eventos" title="Eventos" description="Operação, checklist, fornecedores e pagamentos." />
-        {isAdmin && <ShortcutCard href="/admin/opcoes" title="Opções e pacotes" description="Tipos, origens, itens e pacotes padronizados." />}
-        {isAdmin && <ShortcutCard href="/admin/usuarios" title="Usuários" description="Acessos, permissões e usuários ativos." />}
       </section>
     </AppShell>
   );
 }
 
-function buildNextActions({
-  quotesInProgress,
-  sentQuotes,
-  approvedQuotesWaitingEvent,
-  eventsWithChecklistPending,
-  eventsWithLatePayments,
-  canSeeFinancial,
-}: {
-  quotesInProgress: QuoteRow[];
-  sentQuotes: QuoteRow[];
-  approvedQuotesWaitingEvent: QuoteRow[];
-  eventsWithChecklistPending: EventRow[];
-  eventsWithLatePayments: EventRow[];
-  canSeeFinancial: boolean;
-}) {
-  const actions: ActionItem[] = [];
-  const latePaymentEvent = eventsWithLatePayments[0];
-  const approvedQuote = approvedQuotesWaitingEvent[0];
-  const draftQuote = quotesInProgress[0];
-  const sentQuote = sentQuotes[0];
-  const checklistEvent = eventsWithChecklistPending[0];
+function Metric({ label, value, tone = "neutral" }: { label: string; value: number; tone?: "neutral" | "warning" | "danger" }) {
+  const toneClass = {
+    neutral: "text-[#083653]",
+    warning: "text-[#b7791f]",
+    danger: "text-[#b54747]",
+  }[tone];
 
-  if (canSeeFinancial && latePaymentEvent) {
-    actions.push({
-      title: latePaymentEvent.title,
-      description: "Existe pagamento atrasado ou vencido sem baixa.",
-      href: `/eventos/${latePaymentEvent.id}`,
-      label: "Financeiro",
-      tone: "danger",
-    });
-  }
-
-  if (approvedQuote) {
-    actions.push({
-      title: approvedQuote.title,
-      description: "Orçamento aprovado ainda não virou evento operacional.",
-      href: "/eventos",
-      label: "Criar evento",
-      tone: "warning",
-    });
-  }
-
-  if (draftQuote) {
-    actions.push({
-      title: draftQuote.title,
-      description: `Continue a proposta · ${formatCurrencyFromCents(draftQuote.total_amount_cents)}`,
-      href: `/orcamentos/${draftQuote.id}`,
-      label: "Orçamento",
-      tone: "info",
-    });
-  }
-
-  if (sentQuote) {
-    actions.push({
-      title: sentQuote.title,
-      description: "Proposta enviada aguardando retorno do cliente.",
-      href: `/orcamentos/${sentQuote.id}`,
-      label: "Follow-up",
-      tone: "info",
-    });
-  }
-
-  if (checklistEvent) {
-    const checklist = checklistEvent.contracted_event_checklist ?? [];
-    const completed = checklist.filter((item) => item.is_done).length;
-    actions.push({
-      title: checklistEvent.title,
-      description: `Checklist operacional ${completed} de ${checklist.length}.`,
-      href: `/eventos/${checklistEvent.id}`,
-      label: "Operação",
-      tone: "warning",
-    });
-  }
-
-  return actions.slice(0, 5);
-}
-
-function MetricCard({ label, value, href, tone }: { label: string; value: number; href?: string; tone: "success" | "warning" | "danger" | "info" }) {
-  const className = `rounded-2xl border p-5 transition ${href ? "hover:-translate-y-0.5 hover:shadow-sm" : ""} ${toneClasses[tone].card}`;
-  const content = (
-    <>
-      <p className="text-sm text-slate-600">{label}</p>
-      <p className={`mt-2 text-3xl font-semibold ${toneClasses[tone].text}`}>{value}</p>
-    </>
-  );
-
-  if (href) {
-    return (
-      <Link href={href} className={className}>
-        {content}
-      </Link>
-    );
-  }
-
-  return <div className={className}>{content}</div>;
-}
-
-function QuickLink({ href, label, primary = false }: { href: string; label: string; primary?: boolean }) {
   return (
-    <Link
-      href={href}
-      className={
-        primary
-          ? "rounded-lg bg-[#18352d] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#23483d]"
-          : "rounded-lg border border-[#cfdeda] bg-white px-4 py-3 text-sm font-semibold text-[#18352d] transition hover:border-[#28608f] hover:text-[#28608f]"
-      }
-    >
-      {label}
-    </Link>
+    <div className="rounded-lg border border-[#d9ded8] bg-[#fffdf8] px-3 py-2">
+      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#5f7180]">{label}</p>
+      <p className={`mt-1 text-2xl font-semibold ${toneClass}`}>{value}</p>
+    </div>
   );
 }
 
-function WorkflowStep({ number, title, description, href }: { number: string; title: string; description: string; href: string }) {
-  return (
-    <li>
-      <Link href={href} className="grid grid-cols-[2.25rem_1fr] gap-3 rounded-xl border border-[#edf1ee] p-3 transition hover:border-[#c5d7e5] hover:bg-[#f7fbff]">
-        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#e3f0fa] text-sm font-semibold text-[#28608f]">{number}</span>
-        <span>
-          <span className="block font-semibold text-[#18352d]">{title}</span>
-          <span className="mt-1 block text-sm text-slate-600">{description}</span>
-        </span>
-      </Link>
-    </li>
-  );
-}
-
-function QueueCard({
-  title,
-  description,
-  emptyTitle,
-  emptyDescription,
+function PanelList({
+  empty,
   items,
+  title,
 }: {
+  empty: string;
+  items: { href: string; meta: string; title: string }[];
   title: string;
-  description: string;
-  emptyTitle: string;
-  emptyDescription: string;
-  items: { href: string; title: string; description: string }[];
 }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-[#dbe3dc] bg-white">
-      <div className="border-b border-[#edf1ee] p-5">
-        <h2 className="text-lg font-semibold text-[#092f4f]">{title}</h2>
-        <p className="mt-1 text-sm text-slate-600">{description}</p>
+    <section className="rounded-lg border border-[#d9ded8] bg-[#fffdf8]">
+      <div className="border-b border-[#d9ded8] px-3 py-2">
+        <h2 className="text-sm font-semibold uppercase tracking-[0.08em] text-[#083653]">{title}</h2>
       </div>
       {items.length ? (
-        <ul className="divide-y divide-[#edf1ee]">
-          {items.map((item) => (
-            <li key={item.href}>
-              <Link href={item.href} className="block p-4 transition hover:bg-[#f6fbf7]">
-                <h3 className="font-semibold text-[#18352d]">{item.title}</h3>
-                <p className="mt-1 text-sm text-slate-600">{item.description}</p>
+        <ul className="divide-y divide-[#d9ded8]">
+          {items.map((item, index) => (
+            <li key={`${item.title}-${index}`}>
+              <Link href={item.href} className="block px-3 py-2 hover:bg-[#dcecf6]/45">
+                <p className="font-semibold text-[#092f38]">{item.title}</p>
+                <p className="text-sm text-[#5f7180]">{item.meta}</p>
               </Link>
             </li>
           ))}
         </ul>
       ) : (
-        <div className="p-6">
-          <h3 className="font-semibold text-[#18352d]">{emptyTitle}</h3>
-          <p className="mt-1 text-sm text-slate-600">{emptyDescription}</p>
-        </div>
+        <p className="px-3 py-3 text-sm text-[#5f7180]">{empty}</p>
       )}
     </section>
   );
 }
 
-function ShortcutCard({ href, title, description }: { href: string; title: string; description: string }) {
-  return (
-    <Link href={href} className="rounded-2xl border border-[#dbe3dc] bg-white p-5 transition hover:-translate-y-0.5 hover:border-[#c5d7e5] hover:shadow-sm">
-      <h2 className="font-semibold text-[#18352d]">{title}</h2>
-      <p className="mt-2 text-sm text-slate-600">{description}</p>
-    </Link>
-  );
+function StatusPill({ children }: { children: React.ReactNode }) {
+  return <span className="w-fit rounded-md bg-[#dcecf6] px-2 py-1 text-xs font-semibold text-[#083653]">{children}</span>;
 }
 
-function StatusPill({ children, tone }: { children: React.ReactNode; tone: "success" | "warning" | "danger" | "info" }) {
-  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${toneClasses[tone].pill}`}>{children}</span>;
-}
-
-const toneClasses = {
-  success: {
-    card: "border-[#dbe3dc] bg-[#f6fbf7]",
-    text: "text-[#356451]",
-    pill: "bg-[#edf5ee] text-[#356451]",
-  },
-  warning: {
-    card: "border-[#ead8ae] bg-[#fffaf0]",
-    text: "text-[#8a5a12]",
-    pill: "bg-[#fff4df] text-[#8a5a12]",
-  },
-  danger: {
-    card: "border-red-100 bg-red-50",
-    text: "text-red-800",
-    pill: "bg-red-100 text-red-700",
-  },
-  info: {
-    card: "border-[#c5d7e5] bg-[#f7fbff]",
-    text: "text-[#28608f]",
-    pill: "bg-[#e3f0fa] text-[#28608f]",
-  },
-} as const;
-
-function formatLeadStatus(status: string) {
+function formatContactStatus(status: string) {
   const labels: Record<string, string> = {
     novo: "Novo",
     em_atendimento: "Em atendimento",
@@ -455,8 +243,19 @@ function formatLeadStatus(status: string) {
     orcamento_em_elaboracao: "Orçamento em elaboração",
     proposta_enviada: "Proposta enviada",
     negociacao: "Negociação",
-    ganho: "Ganho",
-    perdido: "Perdido",
+    ganho: "Evento fechado",
+    perdido: "Não avançou",
   };
   return labels[status] ?? status.replaceAll("_", " ");
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(new Date(`${value}T00:00:00`));
+}
+
+function weekEndKey() {
+  const now = new Date();
+  const end = new Date(now);
+  end.setDate(now.getDate() + 7);
+  return end.toISOString().slice(0, 10);
 }

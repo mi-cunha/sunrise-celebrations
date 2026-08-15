@@ -122,7 +122,7 @@ export default async function ConversationsPage({
                         {conversation.leads?.company ? `${conversation.leads.company} · ${conversation.leads.phone}` : conversation.leads?.phone}
                       </p>
                       <p className="mt-1 text-xs text-slate-500">
-                        Funil: {conversation.leads?.status.replaceAll("_", " ") ?? "não informado"} · Responsável: {conversation.assignee?.display_name ?? "não assumido"} · Criado em{" "}
+                        Jornada: {conversation.leads?.status.replaceAll("_", " ") ?? "não informado"} · Responsável: {conversation.assignee?.display_name ?? "não assumido"} · Criado em{" "}
                         {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(conversation.created_at))}
                       </p>
                     </div>

@@ -11,7 +11,7 @@ export default async function HelpPage() {
 
   return (
     <AppShell title="Ajuda e guia de uso">
-      <section className="mt-6 rounded-2xl border border-[#c5d7e5] bg-[#f7fbff] p-6">
+      <section className="mt-4 rounded-lg border border-[#c5d7e5] bg-[#f7fbff] p-4">
         <p className="text-sm font-semibold uppercase tracking-[.16em] text-[#28608f]">Manual rápido</p>
         <h2 className="mt-2 text-2xl font-semibold text-[#092f4f]">Como usar o Sunrise OS sem se perder</h2>
         <p className="mt-2 max-w-3xl text-slate-600">
@@ -19,18 +19,18 @@ export default async function HelpPage() {
         </p>
       </section>
 
-      <section className="mt-8 grid gap-4 lg:grid-cols-2">
+      <section className="mt-5 grid gap-4 lg:grid-cols-2">
         <GuideCard
           title="1. Painel"
-          description="É a central de trabalho. Mostra o que precisa de atenção: leads recentes, orçamentos em preparo, propostas enviadas, eventos e pendências."
+          description="Central de trabalho com contatos recentes, orçamentos, propostas, eventos e pendências."
           href="/painel"
           action="Abrir painel"
         />
         <GuideCard
-          title="2. Lead"
-          description="É o contato comercial. Nele ficam nome, telefone, origem, tipo de evento, data, convidados e observações."
+          title="2. Contato"
+          description="Pessoa ou empresa interessada. Aqui ficam nome, telefone, origem, evento, data, convidados e observações."
           href="/leads/novo"
-          action="Cadastrar lead"
+          action="Cadastrar contato"
         />
         <GuideCard
           title="3. Orçamento e proposta"
@@ -46,11 +46,11 @@ export default async function HelpPage() {
         />
       </section>
 
-      <section className="mt-8 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+      <section className="mt-5 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
         <div className="space-y-4">
-          <HelpSection title="Fluxo recomendado">
+          <HelpSection title="Jornada do evento">
             <ol className="list-decimal space-y-2 pl-5">
-              <li>Cadastre o lead com os dados disponíveis.</li>
+              <li>Cadastre o contato com os dados disponíveis.</li>
               <li>Complete dados faltantes antes de montar a proposta.</li>
               <li>Crie o orçamento e selecione pacote/itens.</li>
               <li>Revise a proposta do cliente.</li>
@@ -62,7 +62,7 @@ export default async function HelpPage() {
           </HelpSection>
 
           <HelpSection title="O que cada área significa">
-            <Term title="Lead" text="Pessoa ou empresa interessada em realizar um evento." />
+            <Term title="Contato" text="Pessoa ou empresa interessada em realizar um evento." />
             <Term title="Orçamento" text="Área interna onde a proposta é montada." />
             <Term title="Proposta" text="Versão visual enviada ou apresentada ao cliente." />
             <Term title="Evento contratado" text="Registro operacional criado depois que o cliente aprova o orçamento." />
@@ -73,11 +73,11 @@ export default async function HelpPage() {
         <div className="space-y-4">
           <HelpSection title="Quando usar cada status">
             <StatusRow label="Novo" description="Contato recém-cadastrado, ainda sem avanço comercial." />
-            <StatusRow label="Em atendimento" description="A equipe já está falando com o cliente." />
+            <StatusRow label="Em atendimento" description="A equipe já está falando com o interessado." />
             <StatusRow label="Orçamento em elaboração" description="Existe orçamento sendo montado." />
             <StatusRow label="Proposta enviada" description="A proposta já foi compartilhada e aguarda retorno." />
-            <StatusRow label="Ganho" description="Cliente aprovou e o processo pode virar evento." />
-            <StatusRow label="Perdido" description="Cliente recusou ou não seguirá com o evento." />
+            <StatusRow label="Evento fechado" description="Proposta aprovada e pronta para virar evento contratado." />
+            <StatusRow label="Não avançou" description="O contato recusou ou não seguirá com o evento." />
           </HelpSection>
 
           <HelpSection title="Pacotes, itens e fornecedores">
@@ -99,7 +99,7 @@ export default async function HelpPage() {
         </div>
       </section>
 
-      <section className="mt-8 space-y-4">
+      <section className="mt-5 space-y-4">
         <HelpSection title="Configurações" id="configuracoes">
           <p>
             A área de configurações concentra os padrões usados pela equipe: tipos de evento, origens, pacotes, itens de orçamento, textos de proposta, logo e usuários.
@@ -121,7 +121,7 @@ export default async function HelpPage() {
           <ul className="list-disc space-y-2 pl-5">
             <li>Padronize tipos de evento, origens e pacotes principais.</li>
             <li>Cadastre apenas usuários ativos da equipe.</li>
-            <li>Teste o fluxo completo com um lead fictício antes de atender clientes reais.</li>
+            <li>Teste o fluxo completo com um contato fictício antes de atender clientes reais.</li>
             <li>Depois dos testes, apague os dados fictícios para não misturar indicadores.</li>
           </ul>
         </HelpSection>
@@ -129,7 +129,7 @@ export default async function HelpPage() {
         <HelpSection title="Backlog combinado">
           <ul className="list-disc space-y-2 pl-5">
             <li>Resumo semanal para gestão.</li>
-            <li>Insights com IA sobre leads, orçamentos e eventos.</li>
+            <li>Insights com IA sobre contatos, orçamentos e eventos.</li>
             <li>Integração com WhatsApp.</li>
             <li>Envio automático de resumo semanal para o grupo da gerência.</li>
             <li>Imagens automáticas na proposta de acordo com o pacote escolhido.</li>
@@ -142,7 +142,7 @@ export default async function HelpPage() {
 
 function GuideCard({ action, description, href, title }: { action: string; description: string; href: string; title: string }) {
   return (
-    <Link href={href} className="rounded-2xl border border-[#dbe3dc] bg-white p-5 transition hover:-translate-y-0.5 hover:border-[#c5d7e5] hover:shadow-sm">
+    <Link href={href} className="rounded-lg border border-[#dbe3dc] bg-white p-4 transition hover:-translate-y-0.5 hover:border-[#c5d7e5] hover:">
       <h2 className="text-lg font-semibold text-[#092f4f]">{title}</h2>
       <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
       <span className="mt-4 inline-flex text-sm font-semibold text-[#28608f]">{action} →</span>
@@ -152,7 +152,7 @@ function GuideCard({ action, description, href, title }: { action: string; descr
 
 function HelpSection({ children, id, title }: { children: React.ReactNode; id?: string; title: string }) {
   return (
-    <section id={id} className="scroll-mt-24 rounded-2xl border border-[#dbe3dc] bg-white p-5">
+    <section id={id} className="scroll-mt-24 rounded-lg border border-[#dbe3dc] bg-white p-4">
       <h2 className="text-lg font-semibold text-[#092f4f]">{title}</h2>
       <div className="mt-2 text-sm leading-6 text-slate-600">{children}</div>
     </section>

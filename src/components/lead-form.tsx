@@ -25,6 +25,6 @@ export function LeadForm({ canAssign, people, eventTypes, leadSources }: { canAs
   {canAssign && <div><label htmlFor="responsibleId">Responsável</label><select id="responsibleId" name="responsibleId" aria-invalid={Boolean(fieldErrors.responsibleId)} defaultValue={values?.responsibleId ?? ""} className={fieldClass(fieldErrors.responsibleId)}><option value="">Eu mesma</option>{people.map(person => <option key={person.id} value={person.id}>{person.display_name ?? "Usuário"}</option>)}</select><ErrorText errors={fieldErrors.responsibleId}/></div>}
   <div className="md:col-span-2"><label htmlFor="notes">Observações</label><textarea id="notes" name="notes" rows={4} aria-invalid={Boolean(fieldErrors.notes)} defaultValue={values?.notes} className={fieldClass(fieldErrors.notes)}/><ErrorText errors={fieldErrors.notes}/></div>
   {state.error && <p role="alert" className="md:col-span-2 rounded-lg bg-red-50 p-3 text-sm text-red-800">{state.error}</p>}
-  <div className="md:col-span-2"><button disabled={pending} className="rounded-lg bg-[#18352d] px-5 py-3 font-semibold text-white disabled:opacity-60">{pending ? "Salvando…" : "Cadastrar lead"}</button></div>
+  <div className="md:col-span-2"><button disabled={pending} className="rounded-lg bg-[#083653] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{pending ? "Salvando..." : "Cadastrar contato"}</button></div>
  </form>;
 }

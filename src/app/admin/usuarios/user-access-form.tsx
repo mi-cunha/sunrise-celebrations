@@ -7,7 +7,7 @@ import { updateUserAccess, type UserAccessFormState } from "./actions";
 const initialState: UserAccessFormState = {};
 
 const permissionLabels: Record<string, { label: string; description: string }> = {
-  atendimento: { label: "Atendimento", description: "Pode criar leads, atender conversas e movimentar o funil." },
+  atendimento: { label: "Atendimento", description: "Pode criar contatos, atender conversas e movimentar a jornada." },
   financeiro: { label: "Financeiro", description: "Reservado para rotinas financeiras futuras." },
   gerencia: { label: "Gerência", description: "Reservado para supervisão e relatórios futuros." },
   admin_owner: { label: "Admin owner", description: "Pode administrar opções e usuários." },

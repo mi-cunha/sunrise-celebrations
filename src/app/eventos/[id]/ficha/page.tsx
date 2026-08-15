@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SetupNotice } from "@/components/setup-notice";
 import { contractedEventBillingModelLabel, contractedEventStatusLabel, contractedEventVendorStatusLabel } from "@/lib/domain/contracted-event";
@@ -130,7 +130,7 @@ export default async function EventOperationalBriefPage({ params }: { params: Pr
     <main className="bg-[#eef5fb] px-4 py-6 text-[#0b2742] print:bg-white print:p-0">
       <div className="mx-auto mb-4 flex max-w-4xl items-center justify-between gap-3 print:hidden">
         <Link href={`/eventos/${detail.id}`} className="text-sm font-semibold text-[#1f5f8b] underline">
-          ← Voltar ao evento
+          ? Voltar ao evento
         </Link>
         <PrintButton />
       </div>
@@ -151,7 +151,7 @@ export default async function EventOperationalBriefPage({ params }: { params: Pr
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#1f5f8b]">Cliente</p>
             <h2 className="mt-2 text-2xl font-semibold">{detail.leads?.name ?? "Cliente"}</h2>
             {detail.leads?.company && <p className="mt-1 text-slate-600">{detail.leads.company}</p>}
-            <p className="mt-1 text-slate-600">{detail.leads?.phone ?? "Contato não informado"}</p>
+            <p className="mt-1 text-slate-600">{detail.leads?.phone ?? "Lead não informado"}</p>
           </div>
           <div className="rounded-2xl bg-[#f3f8fc] p-5">
             <p className="text-sm text-slate-500">Evento</p>
@@ -245,7 +245,7 @@ export default async function EventOperationalBriefPage({ params }: { params: Pr
                       {vendor.contact_name && <p>{vendor.contact_name}</p>}
                       {vendor.phone && <p>{vendor.phone}</p>}
                       {vendor.email && <p>{vendor.email}</p>}
-                      {!vendor.contact_name && !vendor.phone && !vendor.email && <p>Contato a definir</p>}
+                      {!vendor.contact_name && !vendor.phone && !vendor.email && <p>Lead a definir</p>}
                     </div>
                   </div>
                 ))
@@ -263,7 +263,7 @@ export default async function EventOperationalBriefPage({ params }: { params: Pr
                   <div key={item.id} className="grid gap-3 border-b border-[#d7e5ef] px-5 py-4 last:border-0 md:grid-cols-[42px_1fr_160px_150px] print:break-inside-avoid">
                     <div className="pt-0.5">
                       <span className={`grid h-6 w-6 place-items-center rounded border text-sm font-bold ${item.is_done ? "border-[#356451] bg-[#356451] text-white" : "border-[#9dad9f] bg-white text-transparent"}`}>
-                        ✓
+                        ?
                       </span>
                     </div>
                     <div>
@@ -332,7 +332,7 @@ function normalizeTime(value: string | null | undefined) {
 function timelineTimeLabel(entry: TimelineEntry) {
   const start = normalizeTime(entry.start_time);
   const end = normalizeTime(entry.end_time);
-  if (start && end) return `${start} – ${end}`;
+  if (start && end) return `${start}  ${end}`;
   if (start) return start;
   if (end) return `Até ${end}`;
   return "A definir";
