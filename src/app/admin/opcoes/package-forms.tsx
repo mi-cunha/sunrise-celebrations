@@ -5,7 +5,9 @@ import { formatCurrencyFromCents } from "@/lib/domain/quote";
 import {
   createEventPackage,
   createEventPackageItem,
+  removeEventPackage,
   removeEventPackageItem,
+  updateEventPackage,
   updateEventPackageItem,
   type PackageCatalogFormState,
   type PackageItemFormState,
@@ -21,6 +23,7 @@ type EventTypeOption = {
 type EventPackage = {
   id: string;
   event_type: string;
+  event_types: string[] | null;
   name: string;
   description: string | null;
   base_price_cents: number | null;
@@ -46,15 +49,9 @@ export function EventPackageForm({ eventTypes }: { eventTypes: EventTypeOption[]
       <h3 className="font-semibold">Novo pacote</h3>
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <div>
-          <label htmlFor="package-event-type">Tipo de evento</label>
-          <select id="package-event-type" name="eventType" defaultValue={state.eventType ?? ""} required>
-            <option value="">Selecione</option>
-            {eventTypes.map((option) => (
-              <option key={option.name} value={option.name}>
-                {option.name}
-              </option>
-            ))}
-          </select>
+          <p className="mb-2 block text-sm font-semibold text-[#092f38]">Tipos de evento</p>
+          <EventTypeCheckboxes eventTypes={eventTypes} selected={state.eventTypes ?? []} />
+          <p className="mt-1 text-xs text-slate-500">Selecione todos os tipos que podem usar este pacote.</p>
         </div>
         <div>
           <label htmlFor="package-name">Nome do pacote</label>
@@ -91,7 +88,7 @@ export function EventPackageForm({ eventTypes }: { eventTypes: EventTypeOption[]
   );
 }
 
-export function EventPackageAccordionList({ packages }: { packages: EventPackage[] }) {
+export function EventPackageAccordionList({ eventTypes, packages }: { eventTypes: EventTypeOption[]; packages: EventPackage[] }) {
   if (!packages.length) return <p className="mt-4 rounded-lg bg-[#fbf8f1] p-3 text-sm text-slate-600">Nenhum pacote cadastrado.</p>;
 
   return (
@@ -103,7 +100,7 @@ export function EventPackageAccordionList({ packages }: { packages: EventPackage
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <p className="font-semibold">
-                    {eventPackage.event_type} · {eventPackage.name}
+                    {packageEventTypes(eventPackage).join(", ")} · {eventPackage.name}
                   </p>
                   <p className="mt-1 text-sm text-slate-600">{eventPackage.description || "Sem descrição."}</p>
                 </div>
@@ -111,6 +108,7 @@ export function EventPackageAccordionList({ packages }: { packages: EventPackage
               </div>
             </summary>
             <div className="space-y-4 border-t border-[#dbe3dc] p-4">
+              <PackageCatalogEditor eventPackage={eventPackage} eventTypes={eventTypes} />
               <PackageItemForm packageId={eventPackage.id} />
               <PackageItemsList packageId={eventPackage.id} items={eventPackage.event_package_items ?? []} />
               {(eventPackage.proposal_notes || eventPackage.operation_notes) && (
@@ -124,6 +122,70 @@ export function EventPackageAccordionList({ packages }: { packages: EventPackage
         </li>
       ))}
     </ul>
+  );
+}
+
+function PackageCatalogEditor({ eventPackage, eventTypes }: { eventPackage: EventPackage; eventTypes: EventTypeOption[] }) {
+  const [updateState, updateAction, updatePending] = useActionState(updateEventPackage, packageInitialState);
+  const [removeState, removeAction, removePending] = useActionState(removeEventPackage, packageInitialState);
+  const updateMessage = updateState.id === eventPackage.id ? updateState.error ?? updateState.success : undefined;
+  const removeMessage = removeState.id === eventPackage.id ? removeState.error ?? removeState.success : undefined;
+  const values = updateState.id === eventPackage.id ? updateState : undefined;
+
+  return (
+    <details className="rounded-lg border border-[#edf1ee] bg-white">
+      <summary className="cursor-pointer list-none p-4 font-semibold text-[#18352d] transition hover:bg-[#f6f0e5]">
+        Editar pacote
+      </summary>
+      <div className="border-t border-[#edf1ee] p-4">
+        <form action={updateAction}>
+          <input type="hidden" name="id" value={eventPackage.id} />
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <p className="mb-2 block text-sm font-semibold text-[#092f38]">Tipos de evento</p>
+              <EventTypeCheckboxes eventTypes={eventTypes} selected={values?.eventTypes ?? packageEventTypes(eventPackage)} />
+            </div>
+            <div>
+              <label htmlFor={`package-name-${eventPackage.id}`}>Nome do pacote</label>
+              <input id={`package-name-${eventPackage.id}`} name="name" defaultValue={values?.name ?? eventPackage.name} required />
+            </div>
+          </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-[1fr_180px]">
+            <div>
+              <label htmlFor={`package-description-${eventPackage.id}`}>Descrição comercial</label>
+              <textarea id={`package-description-${eventPackage.id}`} name="description" rows={3} defaultValue={values?.description ?? eventPackage.description ?? ""} />
+            </div>
+            <div>
+              <label htmlFor={`package-base-price-${eventPackage.id}`}>Valor por pessoa</label>
+              <input id={`package-base-price-${eventPackage.id}`} name="basePrice" inputMode="decimal" defaultValue={values?.basePrice ?? formatCurrencyInputFromCents(eventPackage.base_price_cents)} placeholder="Ex.: 120,00" />
+            </div>
+          </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div>
+              <label htmlFor={`package-proposal-notes-${eventPackage.id}`}>Texto para proposta</label>
+              <textarea id={`package-proposal-notes-${eventPackage.id}`} name="proposalNotes" rows={3} defaultValue={values?.proposalNotes ?? eventPackage.proposal_notes ?? ""} />
+            </div>
+            <div>
+              <label htmlFor={`package-operation-notes-${eventPackage.id}`}>Observações operacionais</label>
+              <textarea id={`package-operation-notes-${eventPackage.id}`} name="operationNotes" rows={3} defaultValue={values?.operationNotes ?? eventPackage.operation_notes ?? ""} />
+            </div>
+          </div>
+          {updateMessage && <p role="status" className={`mt-4 rounded-lg p-3 text-sm ${updateState.error ? "bg-red-50 text-red-800" : "bg-[#edf5ee] text-[#356451]"}`}>{updateMessage}</p>}
+          <button disabled={updatePending} className="mt-4 rounded-lg bg-[#18352d] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#23483d] disabled:opacity-60">
+            {updatePending ? "Salvando..." : "Salvar pacote"}
+          </button>
+        </form>
+
+        <form action={removeAction} className="mt-4 border-t border-[#edf1ee] pt-4">
+          <input type="hidden" name="id" value={eventPackage.id} />
+          <p className="text-sm text-slate-600">Remover desativa o pacote para novos orçamentos, sem quebrar orçamentos antigos.</p>
+          {removeMessage && <p role="status" className={`mt-3 rounded-lg p-3 text-sm ${removeState.error ? "bg-red-50 text-red-800" : "bg-[#edf5ee] text-[#356451]"}`}>{removeMessage}</p>}
+          <button disabled={removePending} className="mt-3 rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60">
+            {removePending ? "Removendo..." : "Remover pacote"}
+          </button>
+        </form>
+      </div>
+    </details>
   );
 }
 
@@ -142,6 +204,23 @@ function PackageItemForm({ packageId }: { packageId: string }) {
       </button>
     </form>
   );
+}
+
+function EventTypeCheckboxes({ eventTypes, selected }: { eventTypes: EventTypeOption[]; selected: string[] }) {
+  return (
+    <div className="grid max-h-40 gap-2 overflow-auto rounded-lg border border-[#dbe3dc] bg-white p-3 sm:grid-cols-2">
+      {eventTypes.map((option) => (
+        <label key={option.name} className="!mb-0 !flex items-center gap-2 text-sm font-medium text-[#092f38]">
+          <input type="checkbox" name="eventTypes" value={option.name} defaultChecked={selected.includes(option.name)} className="!h-4 !w-4" />
+          {option.name}
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function packageEventTypes(eventPackage: EventPackage) {
+  return eventPackage.event_types?.length ? eventPackage.event_types : [eventPackage.event_type];
 }
 
 function PackageItemsList({ items, packageId }: { items: PackageItem[]; packageId: string }) {
@@ -262,4 +341,9 @@ function categoryLabel(category: string) {
     outro: "Outro",
   };
   return labels[category] ?? category;
+}
+
+function formatCurrencyInputFromCents(value: number | null) {
+  if (value == null) return "";
+  return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value / 100);
 }

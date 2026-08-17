@@ -35,6 +35,7 @@ type QuoteProposalOption = {
 type EventPackageOption = {
   id: string;
   event_type: string;
+  event_types: string[] | null;
   name: string;
   description: string | null;
   base_price_cents: number | null;
@@ -145,7 +146,7 @@ export function QuotePackageForm({
                   <option value="">Selecione um pacote</option>
                   {packageOptions.map((option) => (
                     <option key={option.id} value={option.id}>
-                      {option.name} {option.base_price_cents ? `· ${formatCurrencyFromCents(option.base_price_cents)} / pessoa` : ""}
+                      {option.name} · {packageEventTypes(option).join(", ")} {option.base_price_cents ? `· ${formatCurrencyFromCents(option.base_price_cents)} / pessoa` : ""}
                     </option>
                   ))}
                 </select>
@@ -481,4 +482,8 @@ function categoryLabel(category: string) {
 function asArray<T>(value: T[] | T | null | undefined) {
   if (!value) return [];
   return Array.isArray(value) ? value : [value];
+}
+
+function packageEventTypes(option: EventPackageOption) {
+  return option.event_types?.length ? option.event_types : [option.event_type];
 }

@@ -9,8 +9,14 @@ import {
   contractedEventChecklistItemUpdateSchema,
   contractedEventChecklistSchema,
   contractedEventBillingModelSchema,
+  contractedEventBillingModelLabel,
+  contractedEventContractDocumentKindLabel,
+  contractedEventContractDocumentSchema,
   contractedEventContractSchema,
+  contractedEventContractStatusLabel,
   contractedEventPaymentDeleteSchema,
+  contractedEventPaymentKindLabel,
+  contractedEventPaymentStatusLabel,
   contractedEventPaymentPlanSchema,
   contractedEventPaymentSchema,
   contractedEventPaymentUpdateSchema,
@@ -25,6 +31,7 @@ import {
   eventOperationalBriefSchema,
 } from "@/lib/domain/contracted-event";
 import { requireUser } from "@/lib/auth";
+import { formatCurrencyFromCents } from "@/lib/domain/quote";
 
 export type ContractedEventFormState = {
   error?: string;
@@ -191,6 +198,63 @@ export async function generateEventOperationalBrief(_: ContractedEventFormState,
 
   revalidatePath(`/eventos/${parsed.data.eventId}`);
   redirect(`/eventos/${parsed.data.eventId}?ficha=1`);
+}
+
+export async function generateContractedEventContractDocument(_: ContractedEventFormState, formData: FormData): Promise<ContractedEventFormState> {
+  const raw = {
+    eventId: String(formData.get("eventId") ?? ""),
+    documentKind: String(formData.get("documentKind") ?? ""),
+    notes: String(formData.get("notes") ?? ""),
+  };
+  const parsed = contractedEventContractDocumentSchema.safeParse(raw);
+  if (!parsed.success) return { error: "Revise os dados do contrato.", fieldErrors: parsed.error.flatten().fieldErrors, values: raw, version: Date.now() };
+
+  const { supabase, user } = await requireContractDocumentManager();
+  const { data, error } = await supabase
+    .from("contracted_events")
+    .select("id,title,status,event_type,event_date,guest_count,billing_model,billing_notes,notes,leads(name,company,phone),quotes(title,total_amount_cents),contracted_event_contracts(status,signed_at,notes),contracted_event_payments(kind,status,amount_cents,due_date,paid_at,payment_method,notes)")
+    .eq("id", parsed.data.eventId)
+    .maybeSingle();
+
+  if (error) return { error: error.message, values: raw, version: Date.now() };
+  if (!data) return { error: "Evento não encontrado.", values: raw, version: Date.now() };
+
+  const event = data as unknown as ContractDocumentEvent;
+  const contract = firstRecord(event.contracted_event_contracts);
+  const payments = [...(event.contracted_event_payments ?? [])].sort((left, right) => (left.due_date ?? "9999-12-31").localeCompare(right.due_date ?? "9999-12-31"));
+  const suggestedKind = parsed.data.documentKind === "auto" ? suggestContractDocumentKind(event, payments) : parsed.data.documentKind;
+  const title = `${contractedEventContractDocumentKindLabel(suggestedKind)} - ${event.title}`;
+  const content = buildContractDocumentContent({
+    contract: contract ?? undefined,
+    event,
+    kind: suggestedKind,
+    notes: parsed.data.notes,
+    payments,
+  });
+
+  const { error: upsertError } = await supabase.from("contracted_event_documents").upsert(
+    {
+      event_id: parsed.data.eventId,
+      document_type: "contrato",
+      title,
+      content,
+      created_by: user.id,
+    },
+    { onConflict: "event_id,document_type" },
+  );
+  if (upsertError) return { error: upsertError.message, values: raw, version: Date.now() };
+
+  await supabase.from("contracted_event_history").insert({
+    event_id: parsed.data.eventId,
+    actor_id: user.id,
+    action: "Contrato gerado",
+    metadata: { document_kind: suggestedKind },
+  });
+
+  revalidatePath("/contratos");
+  revalidatePath(`/eventos/${parsed.data.eventId}`);
+  revalidatePath(`/eventos/${parsed.data.eventId}/contrato`);
+  redirect(`/eventos/${parsed.data.eventId}?contrato=1`);
 }
 
 export async function addContractedEventTimelineEntry(_: ContractedEventFormState, formData: FormData): Promise<ContractedEventFormState> {
@@ -577,6 +641,135 @@ function addDays(value: string, days: number) {
 function firstRecord<T>(value: T[] | T | null | undefined) {
   if (Array.isArray(value)) return value[0];
   return value;
+}
+
+type ContractDocumentEvent = {
+  id: string;
+  title: string;
+  status: string;
+  event_type: string | null;
+  event_date: string | null;
+  guest_count: number | null;
+  billing_model: string;
+  billing_notes: string | null;
+  notes: string | null;
+  leads: { name: string; company: string | null; phone: string } | null;
+  quotes: { title: string; total_amount_cents: number } | null;
+  contracted_event_contracts: { status: string; signed_at: string | null; notes: string | null }[] | { status: string; signed_at: string | null; notes: string | null } | null;
+  contracted_event_payments: ContractDocumentPayment[] | null;
+};
+
+type ContractDocumentPayment = {
+  kind: string;
+  status: string;
+  amount_cents: number;
+  due_date: string | null;
+  paid_at: string | null;
+  payment_method: string | null;
+  notes: string | null;
+};
+
+function suggestContractDocumentKind(event: ContractDocumentEvent, payments: ContractDocumentPayment[]) {
+  const totalAmount = event.quotes?.total_amount_cents ?? 0;
+  const hasInstallments = payments.filter((payment) => payment.status !== "cancelado").length > 1;
+  const hasOpenConsumption = event.billing_model === "consumo_aberto_pos_evento" || event.billing_model === "pre_pago_com_consumo_aberto";
+
+  if (totalAmount >= 1500000 || (event.guest_count ?? 0) >= 80 || hasInstallments || hasOpenConsumption) return "contrato_completo";
+  if (totalAmount >= 500000 || (event.guest_count ?? 0) >= 30) return "termo_simplificado";
+  return "aceite_proposta";
+}
+
+function buildContractDocumentContent({
+  contract,
+  event,
+  kind,
+  notes,
+  payments,
+}: {
+  contract?: { status: string; signed_at: string | null; notes: string | null };
+  event: ContractDocumentEvent;
+  kind: string;
+  notes?: string;
+  payments: ContractDocumentPayment[];
+}) {
+  const paymentLines = payments.length
+    ? payments
+        .map((payment) =>
+          [
+            `- ${contractedEventPaymentKindLabel(payment.kind)}: ${formatCurrencyFromCents(payment.amount_cents)}`,
+            `Status: ${contractedEventPaymentStatusLabel(payment.status)}`,
+            payment.due_date ? `Vencimento: ${formatDate(payment.due_date)}` : "",
+            payment.paid_at ? `Pago em: ${formatDate(payment.paid_at)}` : "",
+            payment.payment_method ? `Forma: ${payment.payment_method}` : "",
+            payment.notes ? `Obs.: ${payment.notes}` : "",
+          ]
+            .filter(Boolean)
+            .join(" | "),
+        )
+        .join("\n")
+    : "Nenhum pagamento cadastrado até o momento.";
+
+  return [
+    `# ${contractedEventContractDocumentKindLabel(kind)} - ${event.title}`,
+    "Aviso: este documento é um texto-base operacional. Revise o contrato antes do envio e valide cláusulas jurídicas/fiscais com a pessoa responsável.",
+    [
+      "## Identificação",
+      `Contato/cliente: ${event.leads?.name ?? "Não informado"}`,
+      event.leads?.company ? `Empresa: ${event.leads.company}` : "",
+      event.leads?.phone ? `Telefone: ${event.leads.phone}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    [
+      "## Evento",
+      `Tipo: ${event.event_type ?? "Não informado"}`,
+      `Data: ${event.event_date ? formatDate(event.event_date) : "A definir"}`,
+      `Convidados: ${event.guest_count ? String(event.guest_count) : "A definir"}`,
+      `Modelo de cobrança: ${contractedEventBillingModelLabel(event.billing_model)}`,
+      event.billing_notes ? `Observações de cobrança: ${event.billing_notes}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    [
+      "## Condições comerciais",
+      `Orçamento aprovado: ${event.quotes ? formatCurrencyFromCents(event.quotes.total_amount_cents) : "Não informado"}`,
+      "Validade comercial considerada conforme proposta aprovada.",
+      "A execução do evento depende de confirmação de disponibilidade, alinhamento operacional, contrato/termo revisado e pagamentos conforme combinado.",
+    ].join("\n"),
+    ["## Pagamentos previstos", paymentLines].join("\n"),
+    [
+      "## Pontos para revisão humana",
+      "Confirmar dados completos do contratante.",
+      "Confirmar endereço/local, horário de início e término, política de cancelamento, remarcação, consumo aberto, perdas/danos e responsabilidades.",
+      "Confirmar necessidade de nota fiscal, ISS, retenções ou condições tributárias aplicáveis.",
+      "Confirmar anexos, pacote contratado, itens inclusos e itens fora do escopo.",
+    ].join("\n"),
+    contract
+      ? [
+          "## Status interno do contrato",
+          `Status: ${contractedEventContractStatusLabel(contract.status)}`,
+          contract.signed_at ? `Assinado em: ${formatDate(contract.signed_at)}` : "Assinatura: pendente ou não registrada",
+          contract.notes ? `Observações: ${contract.notes}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n")
+      : "## Status interno do contrato\nContrato ainda sem status registrado.",
+    notes ? `## Observações adicionadas na geração\n${notes}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(new Date(`${value}T00:00:00`));
+}
+
+async function requireContractDocumentManager() {
+  const context = await requireUser();
+  if (!context.permissions.some((permission) => permission === "gerencia" || permission === "admin_owner")) {
+    redirect("/painel?error=forbidden");
+  }
+  return context;
 }
 
 async function requireFinancialManager() {

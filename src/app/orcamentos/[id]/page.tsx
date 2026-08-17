@@ -53,6 +53,7 @@ type EventPackageItem = {
 type EventPackageOption = {
   id: string;
   event_type: string;
+  event_types: string[] | null;
   name: string;
   description: string | null;
   base_price_cents: number | null;
@@ -110,7 +111,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
 
   const { data: quote, error } = await supabase
     .from("quotes")
-    .select("id,title,status,event_type,desired_date,guest_count,notes,total_amount_cents,sent_at,approved_at,refused_at,decision_reason,admin_edit_unlocked,created_at,leads(id,name,company,phone),quote_items(id,description,quantity,unit_price_cents),quote_packages(id,package_id,unit_price_cents,guest_count,total_price_cents,notes,event_package_catalog(id,event_type,name,description,base_price_cents,event_package_items(id,category,name,description,show_in_proposal,show_in_operational_brief))),quote_proposal_options(id,title,content),quote_history(id,action,metadata,created_at,profiles(display_name)),contracted_events(id,status)")
+    .select("id,title,status,event_type,desired_date,guest_count,notes,total_amount_cents,sent_at,approved_at,refused_at,decision_reason,admin_edit_unlocked,created_at,leads(id,name,company,phone),quote_items(id,description,quantity,unit_price_cents),quote_packages(id,package_id,unit_price_cents,guest_count,total_price_cents,notes,event_package_catalog(id,event_type,event_types,name,description,base_price_cents,event_package_items(id,category,name,description,show_in_proposal,show_in_operational_brief))),quote_proposal_options(id,title,content),quote_history(id,action,metadata,created_at,profiles(display_name)),contracted_events(id,status)")
     .eq("id", id)
     .maybeSingle();
   const { data: proposalCatalogOptions } = await supabase.from("proposal_option_catalog").select("id,title,content").eq("is_active", true).order("sort_order").order("title");
@@ -126,14 +127,14 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
   if (!quote) notFound();
 
   const detail = quote as unknown as QuoteDetail;
-  let packageRequest = supabase
+  const packageRequest = supabase
     .from("event_package_catalog")
-    .select("id,event_type,name,description,base_price_cents,event_package_items(id,category,name,description,show_in_proposal,show_in_operational_brief)")
+    .select("id,event_type,event_types,name,description,base_price_cents,event_package_items(id,category,name,description,show_in_proposal,show_in_operational_brief)")
     .eq("is_active", true)
     .order("sort_order")
     .order("name");
-  if (detail.event_type) packageRequest = packageRequest.eq("event_type", detail.event_type);
   const { data: packageOptions } = await packageRequest;
+  const safePackageOptions = ((packageOptions ?? []) as EventPackageOption[]).filter((option) => !detail.event_type || packageMatchesEventType(option, detail.event_type));
   const items = [...(detail.quote_items ?? [])];
   const selectedPackage = firstRecord(detail.quote_packages);
   const selectedProposalOptions = [...(detail.quote_proposal_options ?? [])];
@@ -227,7 +228,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
           <QuotePackageForm
             canEdit={canEditQuote}
             guestCount={detail.guest_count}
-            packageOptions={(packageOptions ?? []) as EventPackageOption[]}
+            packageOptions={safePackageOptions}
             quoteId={detail.id}
             selectedPackage={selectedPackage ?? undefined}
           />
@@ -374,4 +375,9 @@ function quoteNextStepDescription({ hasEvent, hasItems, status }: { hasEvent: bo
 function firstRecord<T>(value: T[] | T | null | undefined) {
   if (Array.isArray(value)) return value[0];
   return value;
+}
+
+function packageMatchesEventType(option: EventPackageOption, eventType: string) {
+  const eventTypes = option.event_types?.length ? option.event_types : [option.event_type];
+  return eventTypes.includes(eventType);
 }

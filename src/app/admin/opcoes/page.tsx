@@ -16,6 +16,7 @@ type CompanySettings = { logo_url: string | null };
 type EventPackage = {
   id: string;
   event_type: string;
+  event_types: string[] | null;
   name: string;
   description: string | null;
   base_price_cents: number | null;
@@ -52,7 +53,7 @@ export default async function OptionsAdminPage() {
   const { data: quoteItemOptions } = await supabase.from("quote_item_catalog").select("id,name,description,default_unit_price_cents,is_active").order("sort_order").order("name");
   const { data: eventPackages } = await supabase
     .from("event_package_catalog")
-    .select("id,event_type,name,description,base_price_cents,proposal_notes,operation_notes,event_package_items(id,category,name,description,show_in_proposal,show_in_operational_brief)")
+    .select("id,event_type,event_types,name,description,base_price_cents,proposal_notes,operation_notes,event_package_items(id,category,name,description,show_in_proposal,show_in_operational_brief)")
     .eq("is_active", true)
     .order("event_type")
     .order("sort_order")
@@ -68,7 +69,7 @@ export default async function OptionsAdminPage() {
       {error && <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-[#b54747]">Tabela de opções indisponível. Confira as migrations.</p>}
 
       <div className="mt-4 space-y-2">
-        <AdminSection id="opcoes" title="Tipos de evento" count={eventTypes.length} defaultOpen>
+        <AdminSection id="opcoes" title="Tipos de evento" count={eventTypes.length}>
           <OptionForm kind="event_type" label="Novo tipo" />
           <OptionAccordionList options={eventTypes} />
         </AdminSection>
@@ -89,7 +90,7 @@ export default async function OptionsAdminPage() {
 
         <AdminSection id="pacotes" title="Pacotes" count={(eventPackages ?? []).length}>
           <EventPackageForm eventTypes={eventTypes.map((option) => ({ name: option.name }))} />
-          <EventPackageAccordionList packages={(eventPackages ?? []) as EventPackage[]} />
+          <EventPackageAccordionList eventTypes={eventTypes.map((option) => ({ name: option.name }))} packages={(eventPackages ?? []) as EventPackage[]} />
         </AdminSection>
 
         <AdminSection title="Textos da proposta" count={(proposalOptions ?? []).length}>

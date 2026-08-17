@@ -151,6 +151,15 @@ export const contractedEventContractSchema = z.object({
   notes: optionalNotes,
 });
 
+export const contractedEventContractDocumentKinds = ["auto", "contrato_completo", "termo_simplificado", "aceite_proposta"] as const;
+export type ContractedEventContractDocumentKind = (typeof contractedEventContractDocumentKinds)[number];
+
+export const contractedEventContractDocumentSchema = z.object({
+  eventId: z.string().uuid(),
+  documentKind: z.enum(contractedEventContractDocumentKinds),
+  notes: optionalNotes,
+});
+
 export const contractedEventBillingModelSchema = z.object({
   eventId: z.string().uuid(),
   billingModel: z.enum(contractedEventBillingModels),
@@ -279,6 +288,16 @@ export function contractedEventContractStatusLabel(status: string) {
     cancelado: "Cancelado",
   };
   return labels[status] ?? status;
+}
+
+export function contractedEventContractDocumentKindLabel(kind: string) {
+  const labels: Record<string, string> = {
+    auto: "Sugestão automática",
+    contrato_completo: "Contrato completo",
+    termo_simplificado: "Termo simplificado",
+    aceite_proposta: "Aceite de proposta",
+  };
+  return labels[kind] ?? kind;
 }
 
 export function contractedEventBillingModelLabel(model: string) {

@@ -35,7 +35,7 @@ const quoteItemCatalogOptionSchema = z.object({
 });
 
 const packageCatalogSchema = z.object({
-  eventType: z.string().trim().min(2, "Informe o tipo de evento.").max(80, "Use até 80 caracteres."),
+  eventTypes: z.array(z.string().trim().min(2).max(80)).min(1, "Selecione ao menos um tipo de evento."),
   name: z.string().trim().min(2, "Informe o nome do pacote.").max(120, "Use até 120 caracteres."),
   description: z.string().trim().max(1200, "Use até 1200 caracteres.").optional(),
   basePrice: z
@@ -46,6 +46,14 @@ const packageCatalogSchema = z.object({
     .refine((value) => value === null || value >= 0, "Informe um valor válido."),
   proposalNotes: z.string().trim().max(1600, "Use até 1600 caracteres.").optional(),
   operationNotes: z.string().trim().max(1600, "Use até 1600 caracteres.").optional(),
+});
+
+const packageCatalogUpdateSchema = packageCatalogSchema.extend({
+  id: z.string().uuid(),
+});
+
+const packageCatalogDeleteSchema = z.object({
+  id: z.string().uuid(),
 });
 
 const packageItemSchema = z.object({
@@ -69,7 +77,7 @@ export type OptionFormState = { error?: string; success?: string; kind?: "event_
 export type LogoFormState = { error?: string; success?: string; logoUrl?: string };
 export type ProposalOptionFormState = { error?: string; success?: string; title?: string; content?: string };
 export type QuoteItemCatalogOptionFormState = { error?: string; success?: string; name?: string; description?: string; defaultUnitPrice?: string };
-export type PackageCatalogFormState = { error?: string; success?: string; eventType?: string; name?: string; description?: string; basePrice?: string; proposalNotes?: string; operationNotes?: string };
+export type PackageCatalogFormState = { error?: string; success?: string; id?: string; eventType?: string; eventTypes?: string[]; name?: string; description?: string; basePrice?: string; proposalNotes?: string; operationNotes?: string };
 export type PackageItemFormState = { error?: string; success?: string; packageId?: string; category?: string; name?: string; description?: string };
 export type CatalogMutationState = { error?: string; success?: string; id?: string };
 
@@ -154,7 +162,7 @@ export async function createQuoteItemCatalogOption(_: QuoteItemCatalogOptionForm
 
 export async function createEventPackage(_: PackageCatalogFormState, formData: FormData): Promise<PackageCatalogFormState> {
   const raw = {
-    eventType: String(formData.get("eventType") ?? ""),
+    eventTypes: formData.getAll("eventTypes").map(String),
     name: String(formData.get("name") ?? ""),
     description: String(formData.get("description") ?? ""),
     basePrice: String(formData.get("basePrice") ?? ""),
@@ -167,8 +175,10 @@ export async function createEventPackage(_: PackageCatalogFormState, formData: F
   const { supabase, permissions } = await requireUser();
   if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
 
+  const primaryEventType = parsed.data.eventTypes[0];
   const { error } = await supabase.from("event_package_catalog").insert({
-    event_type: parsed.data.eventType,
+    event_type: primaryEventType,
+    event_types: parsed.data.eventTypes,
     name: parsed.data.name,
     description: parsed.data.description || null,
     base_price_cents: parsed.data.basePrice,
@@ -179,6 +189,64 @@ export async function createEventPackage(_: PackageCatalogFormState, formData: F
 
   revalidatePath("/admin/opcoes");
   return { success: "Pacote criado." };
+}
+
+export async function updateEventPackage(_: PackageCatalogFormState, formData: FormData): Promise<PackageCatalogFormState> {
+  const raw = packageRawValues(formData);
+  const parsed = packageCatalogUpdateSchema.safeParse(raw);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revise o pacote.", ...raw };
+
+  const { supabase, permissions } = await requireUser();
+  if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
+
+  const primaryEventType = parsed.data.eventTypes[0];
+  const { error } = await supabase
+    .from("event_package_catalog")
+    .update({
+      event_type: primaryEventType,
+      event_types: parsed.data.eventTypes,
+      name: parsed.data.name,
+      description: parsed.data.description || null,
+      base_price_cents: parsed.data.basePrice,
+      proposal_notes: parsed.data.proposalNotes || null,
+      operation_notes: parsed.data.operationNotes || null,
+    })
+    .eq("id", parsed.data.id);
+  if (error) return { error: error.code === "23505" ? "Esse pacote já existe para este tipo de evento." : "Não foi possível atualizar o pacote.", ...raw };
+
+  revalidatePath("/admin/opcoes");
+  revalidatePath("/orcamentos/[id]", "page");
+  revalidatePath("/orcamentos/[id]/proposta", "page");
+  return { success: "Pacote atualizado.", id: parsed.data.id };
+}
+
+export async function removeEventPackage(_: PackageCatalogFormState, formData: FormData): Promise<PackageCatalogFormState> {
+  const parsed = packageCatalogDeleteSchema.safeParse({
+    id: formData.get("id"),
+  });
+  if (!parsed.success) return { error: "Não foi possível identificar o pacote.", id: String(formData.get("id") ?? "") };
+
+  const { supabase, permissions } = await requireUser();
+  if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
+
+  const { error } = await supabase.from("event_package_catalog").update({ is_active: false }).eq("id", parsed.data.id);
+  if (error) return { error: "Não foi possível remover o pacote.", id: parsed.data.id };
+
+  revalidatePath("/admin/opcoes");
+  revalidatePath("/orcamentos/[id]", "page");
+  return { success: "Pacote removido do catálogo.", id: parsed.data.id };
+}
+
+function packageRawValues(formData: FormData) {
+  return {
+    id: String(formData.get("id") ?? ""),
+    eventTypes: formData.getAll("eventTypes").map(String),
+    name: String(formData.get("name") ?? ""),
+    description: String(formData.get("description") ?? ""),
+    basePrice: String(formData.get("basePrice") ?? ""),
+    proposalNotes: String(formData.get("proposalNotes") ?? ""),
+    operationNotes: String(formData.get("operationNotes") ?? ""),
+  };
 }
 
 export async function createEventPackageItem(_: PackageItemFormState, formData: FormData): Promise<PackageItemFormState> {

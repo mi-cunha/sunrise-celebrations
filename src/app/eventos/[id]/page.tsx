@@ -7,7 +7,7 @@ import { contractedEventBillingModelLabel, contractedEventContractStatusLabel, c
 import { formatCurrencyFromCents, quoteStatusLabel } from "@/lib/domain/quote";
 import { requireUser } from "@/lib/auth";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
-import { BillingModelForm, ChecklistItemCard, ChecklistItemForm, ContractedEventStatusForm, ContractForm, OperationalBriefForm, PaymentCard, PaymentForm, PaymentPlanForm, TimelineEntryCard, TimelineEntryForm, VendorCard, VendorForm } from "./event-forms";
+import { BillingModelForm, ChecklistItemCard, ChecklistItemForm, ContractedEventStatusForm, ContractDocumentForm, ContractForm, OperationalBriefForm, PaymentCard, PaymentForm, PaymentPlanForm, TimelineEntryCard, TimelineEntryForm, VendorCard, VendorForm } from "./event-forms";
 
 type ContractedEventDetail = {
   id: string;
@@ -109,7 +109,7 @@ export default async function EventDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ ficha?: string }>;
+  searchParams: Promise<{ contrato?: string; ficha?: string }>;
 }) {
   if (!hasSupabaseConfig()) return <SetupNotice />;
 
@@ -118,6 +118,7 @@ export default async function EventDetailPage({
   const { supabase, permissions } = await requireUser();
   const canManageEvents = permissions.some((permission) => permission === "atendimento" || permission === "gerencia" || permission === "admin_owner");
   const canManageFinancials = permissions.some((permission) => permission === "financeiro" || permission === "gerencia" || permission === "admin_owner");
+  const canGenerateContractDocument = permissions.some((permission) => permission === "gerencia" || permission === "admin_owner");
 
   const { data: event, error } = await supabase
     .from("contracted_events")
@@ -151,6 +152,7 @@ export default async function EventDetailPage({
   const assignees = (profiles ?? []) as Assignee[];
   const assigneeNames = new Map(assignees.map((profile) => [profile.id, profile.display_name ?? "Usuário"]));
   const operationalBrief = detail.contracted_event_documents?.find((document) => document.document_type === "ficha_operacional");
+  const contractDocument = detail.contracted_event_documents?.find((document) => document.document_type === "contrato");
   const completedItems = checklist.filter((item) => item.is_done).length;
   const hasPendingChecklist = checklist.some((item) => !item.is_done);
   const hasVendors = vendors.length > 0;
@@ -222,8 +224,8 @@ export default async function EventDetailPage({
             <section className="rounded-lg border border-[#dbe3dc] bg-white p-4">
               <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div>
-                  <h2 className="font-semibold">Contrato e pagamentos</h2>
-                  <p className="mt-1 text-sm text-slate-600">Controle financeiro interno do evento. Esta área não aparece na ficha operacional.</p>
+                  <h2 className="font-semibold">Contrato, cobrança e pagamentos</h2>
+                  <p className="mt-1 text-sm text-slate-600">Controle interno do evento. Esta área não aparece na ficha operacional.</p>
                 </div>
                 <div className="grid gap-2 text-sm sm:grid-cols-3">
                   <FinanceBadge label="Contrato" value={contract ? contractedEventContractStatusLabel(contract.status) : "Pendente"} />
@@ -234,8 +236,9 @@ export default async function EventDetailPage({
 
               <div className="mt-5 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
                 <div className="space-y-5">
-                  <BillingModelForm billing={{ billing_model: detail.billing_model, billing_notes: detail.billing_notes }} eventId={detail.id} />
                   <ContractForm contract={contract ?? undefined} eventId={detail.id} />
+                  {canGenerateContractDocument && <ContractDocumentForm document={contractDocument ?? undefined} eventId={detail.id} />}
+                  <BillingModelForm billing={{ billing_model: detail.billing_model, billing_notes: detail.billing_notes }} eventId={detail.id} />
                 </div>
                 <div className="rounded-lg border border-[#dbe3dc] bg-white p-4">
                   <h3 className="font-semibold">Pagamentos</h3>
@@ -330,23 +333,32 @@ export default async function EventDetailPage({
           <section className="rounded-lg border border-[#dbe3dc] bg-white p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h2 className="font-semibold">Documentos operacionais</h2>
-                <p className="mt-1 text-sm text-slate-600">Gere uma ficha interna com dados do evento, investimento aprovado, observações e checklist.</p>
+                <h2 className="font-semibold">Documentos do evento</h2>
+                <p className="mt-1 text-sm text-slate-600">Ficha operacional e contrato ficam concentrados aqui para consulta e impressão.</p>
               </div>
               {canManageEvents && <OperationalBriefForm eventId={detail.id} hasDocument={Boolean(operationalBrief)} />}
             </div>
-            {operationalBrief ? (
-              <div className="mt-5 flex flex-col gap-3 rounded-lg border border-[#edf1ee] bg-[#fbf8f1] p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="font-semibold text-[#18352d]">{operationalBrief.title}</p>
-                  <p className="mt-1 text-sm text-slate-600">Atualizada em {formatDateTime(operationalBrief.updated_at)}</p>
-                </div>
-                <Link href={`/eventos/${detail.id}?ficha=1`} className="rounded-lg border border-[#dbe3dc] bg-white px-4 py-2 text-sm font-semibold text-[#18352d] transition hover:bg-[#f6fbf7]">
-                  Abrir ficha
-                </Link>
+            {operationalBrief || contractDocument ? (
+              <div className="mt-5 grid gap-3">
+                {operationalBrief && (
+                  <DocumentCard
+                    href={`/eventos/${detail.id}?ficha=1`}
+                    title={operationalBrief.title}
+                    updatedAt={operationalBrief.updated_at}
+                    action="Abrir ficha"
+                  />
+                )}
+                {contractDocument && (
+                  <DocumentCard
+                    href={`/eventos/${detail.id}?contrato=1`}
+                    title={contractDocument.title}
+                    updatedAt={contractDocument.updated_at}
+                    action="Abrir contrato"
+                  />
+                )}
               </div>
             ) : (
-              <p className="mt-4 rounded-lg bg-[#fbf8f1] p-3 text-sm text-slate-600">Nenhuma ficha operacional gerada ainda.</p>
+              <p className="mt-4 rounded-lg bg-[#fbf8f1] p-3 text-sm text-slate-600">Nenhum documento gerado ainda.</p>
             )}
           </section>
         </section>
@@ -374,7 +386,22 @@ export default async function EventDetailPage({
         </aside>
       </div>
       {query.ficha === "1" && operationalBrief && <OperationalBriefModal eventId={detail.id} />}
+      {query.contrato === "1" && contractDocument && <ContractDocumentModal eventId={detail.id} />}
     </AppShell>
+  );
+}
+
+function DocumentCard({ action, href, title, updatedAt }: { action: string; href: string; title: string; updatedAt: string }) {
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-[#edf1ee] bg-[#fbf8f1] p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p className="font-semibold text-[#18352d]">{title}</p>
+        <p className="mt-1 text-sm text-slate-600">Atualizado em {formatDateTime(updatedAt)}</p>
+      </div>
+      <Link href={href} className="rounded-lg border border-[#dbe3dc] bg-white px-4 py-2 text-sm font-semibold text-[#18352d] transition hover:bg-[#f6fbf7]">
+        {action}
+      </Link>
+    </div>
   );
 }
 
@@ -397,6 +424,30 @@ function OperationalBriefModal({ eventId }: { eventId: string }) {
           </div>
         </div>
         <iframe title="Ficha operacional" src={`/eventos/${eventId}/ficha`} className="min-h-0 flex-1 border-0" />
+      </div>
+    </div>
+  );
+}
+
+function ContractDocumentModal({ eventId }: { eventId: string }) {
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-950/55 p-4">
+      <div className="mx-auto flex h-full max-w-6xl flex-col overflow-hidden rounded-lg bg-white ">
+        <div className="flex items-center justify-between gap-3 border-b border-[#dbe3dc] px-4 py-3">
+          <div>
+            <p className="font-semibold text-[#18352d]">Contrato</p>
+            <p className="text-xs text-slate-500">Revise antes de enviar. Use a página interna para imprimir ou salvar em PDF.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link href={`/eventos/${eventId}/contrato`} target="_blank" className="rounded-lg border border-[#dbe3dc] px-3 py-2 text-sm font-semibold text-[#18352d] hover:bg-[#f6fbf7]">
+              Abrir página
+            </Link>
+            <Link href={`/eventos/${eventId}`} className="rounded-lg bg-[#18352d] px-3 py-2 text-sm font-semibold text-white hover:bg-[#23483d]">
+              Fechar
+            </Link>
+          </div>
+        </div>
+        <iframe title="Contrato" src={`/eventos/${eventId}/contrato`} className="min-h-0 flex-1 border-0" />
       </div>
     </div>
   );

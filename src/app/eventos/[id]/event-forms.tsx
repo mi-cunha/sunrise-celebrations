@@ -4,6 +4,8 @@ import { useActionState, useState } from "react";
 import {
   contractedEventBillingModelLabel,
   contractedEventBillingModels,
+  contractedEventContractDocumentKindLabel,
+  contractedEventContractDocumentKinds,
   contractedEventContractStatuses,
   contractedEventContractStatusLabel,
   contractedEventPaymentKindLabel,
@@ -26,6 +28,7 @@ import {
   addContractedEventVendor,
   addContractedEventTimelineEntry,
   addContractedEventChecklistItem,
+  generateContractedEventContractDocument,
   generateContractedEventPaymentPlan,
   generateEventOperationalBrief,
   moveContractedEventChecklistItem,
@@ -87,6 +90,10 @@ type ContractForForm = {
   signed_at: string | null;
   notes: string | null;
 };
+
+type ContractDocumentForForm = {
+  updated_at: string;
+} | null;
 
 type BillingModelForForm = {
   billing_model: string;
@@ -443,6 +450,45 @@ export function ContractForm({ contract, eventId }: { contract?: ContractForForm
         {pending ? "Salvando..." : "Salvar contrato"}
       </button>
     </form>
+  );
+}
+
+export function ContractDocumentForm({ document, eventId }: { document?: ContractDocumentForForm; eventId: string }) {
+  const [state, action, pending] = useActionState(generateContractedEventContractDocument, initialState);
+  const fieldErrors = state.fieldErrors ?? {};
+
+  return (
+    <details className="rounded-xl border border-[#dbe3dc] bg-white p-5" open={!document}>
+      <summary className="cursor-pointer list-none font-semibold text-[#18352d]">Documento do contrato</summary>
+      <form action={action} className="mt-4 border-t border-[#edf1ee] pt-4">
+        <input type="hidden" name="eventId" value={eventId} />
+        <p className="text-sm text-slate-600">Gere um texto-base para revisão humana. Cláusulas jurídicas e fiscais devem ser validadas antes do envio.</p>
+        <div className="mt-4 grid gap-4 md:grid-cols-[0.8fr_1.2fr]">
+          <div>
+            <label htmlFor="contract-document-kind">Tipo</label>
+            <select id="contract-document-kind" name="documentKind" defaultValue={state.values?.documentKind ?? "auto"}>
+              {contractedEventContractDocumentKinds.map((kind) => (
+                <option key={kind} value={kind}>
+                  {contractedEventContractDocumentKindLabel(kind)}
+                </option>
+              ))}
+            </select>
+            {fieldErrors.documentKind?.[0] && <p className="mt-1 text-sm text-red-700">{fieldErrors.documentKind[0]}</p>}
+          </div>
+          <div>
+            <label htmlFor="contract-document-notes">Observações para incluir</label>
+            <textarea id="contract-document-notes" name="notes" rows={3} defaultValue={state.values?.notes ?? ""} placeholder="Ex.: condições específicas, pontos de revisão ou orientação comercial." />
+            {fieldErrors.notes?.[0] && <p className="mt-1 text-sm text-red-700">{fieldErrors.notes[0]}</p>}
+          </div>
+        </div>
+        {document && <p className="mt-3 text-xs text-slate-500">Última versão gerada em {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(document.updated_at))}.</p>}
+        {state.error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">{state.error}</p>}
+        {state.success && <p role="status" className="mt-4 rounded-lg bg-[#edf5ee] p-3 text-sm text-[#356451]">{state.success}</p>}
+        <button disabled={pending} className="mt-4 rounded-lg bg-[#18352d] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#23483d] active:scale-[0.99] disabled:opacity-60">
+          {pending ? "Gerando..." : document ? "Atualizar contrato" : "Gerar contrato"}
+        </button>
+      </form>
+    </details>
   );
 }
 
