@@ -67,6 +67,25 @@ type CompanySettings = {
   logo_url: string | null;
 };
 
+const standardProposalInfo = [
+  {
+    title: "Mobiliário incluso",
+    content: "A proposta contempla o mobiliário base do espaço, conforme composição e disponibilidade alinhadas para o evento.",
+  },
+  {
+    title: "Validade do orçamento",
+    content: "Orçamento válido por 30 dias a partir da data de emissão da proposta.",
+  },
+  {
+    title: "Dados de pagamento",
+    content: "Banco Santander\nAgência: 4389\nConta corrente: 130024143\nCNPJ: 05.904.097/0001-80\nPIX: 05.904.097/0001-80",
+  },
+  {
+    title: "Nota fiscal e ISS",
+    content: "Caso seja necessária a emissão de nota fiscal de serviços, a incidência de ISS e eventuais ajustes tributários serão confirmados antes da emissão, conforme orientação fiscal/contábil aplicável.",
+  },
+];
+
 export default async function QuoteProposalPage({ params }: { params: Promise<{ id: string }> }) {
   if (!hasSupabaseConfig()) return <SetupNotice />;
   const { id } = await params;
@@ -235,19 +254,23 @@ export default async function QuoteProposalPage({ params }: { params: Promise<{ 
               <p className="mt-2 text-4xl font-semibold">{formatCurrencyFromCents(detail.total_amount_cents)}</p>
             </div>
 
-            {proposalOptions.length > 0 && (
-              <section className="mt-8 print:break-inside-avoid">
-                <h2 className="text-xl font-semibold">Condições e informações adicionais</h2>
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  {proposalOptions.map((option) => (
-                    <div key={option.id} className="rounded-2xl bg-[#f3f8fc] p-5 print:break-inside-avoid">
-                      <h3 className="font-semibold">{option.title}</h3>
-                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{option.content}</p>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
+            <section className="mt-8 print:break-inside-avoid">
+              <h2 className="text-xl font-semibold">Condições e informações adicionais</h2>
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                {standardProposalInfo.map((option) => (
+                  <div key={option.title} className="rounded-2xl bg-[#f3f8fc] p-5 print:break-inside-avoid">
+                    <h3 className="font-semibold">{option.title}</h3>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{option.content}</p>
+                  </div>
+                ))}
+                {proposalOptions.map((option) => (
+                  <div key={option.id} className="rounded-2xl bg-[#f3f8fc] p-5 print:break-inside-avoid">
+                    <h3 className="font-semibold">{option.title}</h3>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{option.content}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
           </section>
         </section>
       </article>
