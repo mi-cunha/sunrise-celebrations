@@ -8,6 +8,7 @@ import { OptionForm } from "./option-form";
 import { CompanyLogoForm, ProposalOptionForm, QuoteItemCatalogOptionForm } from "./proposal-settings-forms";
 import { OptionAccordionList, ProposalOptionAccordionList, QuoteItemCatalogAccordionList } from "./catalog-accordions";
 import { EventPackageAccordionList, EventPackageForm } from "./package-forms";
+import { PackageModelPanel, type PackageLibraryItem, type PackageRule, type PackageSubcategory } from "./package-model-forms";
 
 type Option = { id: string; kind: "event_type" | "lead_source"; name: string; is_active: boolean };
 type ProposalOption = { id: string; title: string; content: string; is_active: boolean };
@@ -29,7 +30,18 @@ type EventPackage = {
     description: string | null;
     show_in_proposal: boolean;
     show_in_operational_brief: boolean;
+    is_choice: boolean;
+    choice_group: string | null;
+    choice_min: number | null;
+    choice_max: number | null;
   }[];
+};
+
+type EventPackageOption = {
+  id: string;
+  event_type: string;
+  event_types: string[] | null;
+  name: string;
 };
 
 export default async function OptionsAdminPage() {
@@ -53,11 +65,29 @@ export default async function OptionsAdminPage() {
   const { data: quoteItemOptions } = await supabase.from("quote_item_catalog").select("id,name,description,default_unit_price_cents,is_active").order("sort_order").order("name");
   const { data: eventPackages } = await supabase
     .from("event_package_catalog")
-    .select("id,event_type,event_types,name,description,base_price_cents,proposal_notes,operation_notes,event_package_items(id,category,name,description,show_in_proposal,show_in_operational_brief)")
+    .select("id,event_type,event_types,name,description,base_price_cents,proposal_notes,operation_notes,event_package_items(id,category,name,description,show_in_proposal,show_in_operational_brief,is_choice,choice_group,choice_min,choice_max)")
     .eq("is_active", true)
     .order("event_type")
     .order("sort_order")
     .order("name");
+  const { data: packageSubcategories } = await supabase
+    .from("event_package_subcategories")
+    .select("id,category,name,description")
+    .eq("is_active", true)
+    .order("category")
+    .order("sort_order")
+    .order("name");
+  const { data: packageLibraryItems } = await supabase
+    .from("event_package_item_catalog")
+    .select("id,name,proposal_description,operational_description,event_package_subcategories(id,category,name)")
+    .eq("is_active", true)
+    .order("sort_order")
+    .order("name");
+  const { data: packageRules } = await supabase
+    .from("event_package_rules")
+    .select("id,package_id,subcategory_id,title,selection_min,selection_max,is_required,event_package_catalog(id,name,event_type,event_types),event_package_subcategories(id,category,name),event_package_rule_items(id,event_package_item_catalog(id,name))")
+    .order("sort_order")
+    .order("created_at");
 
   const eventTypes = ((options ?? []) as Option[]).filter((option) => option.kind === "event_type");
   const leadSources = ((options ?? []) as Option[]).filter((option) => option.kind === "lead_source");
@@ -91,6 +121,15 @@ export default async function OptionsAdminPage() {
         <AdminSection id="pacotes" title="Pacotes" count={(eventPackages ?? []).length}>
           <EventPackageForm eventTypes={eventTypes.map((option) => ({ name: option.name }))} />
           <EventPackageAccordionList eventTypes={eventTypes.map((option) => ({ name: option.name }))} packages={(eventPackages ?? []) as EventPackage[]} />
+        </AdminSection>
+
+        <AdminSection id="pacotes-2" title="Pacotes 2.0" count={(packageSubcategories ?? []).length + (packageLibraryItems ?? []).length + (packageRules ?? []).length}>
+          <PackageModelPanel
+            items={(packageLibraryItems ?? []) as PackageLibraryItem[]}
+            packages={(eventPackages ?? []) as EventPackageOption[]}
+            rules={(packageRules ?? []) as PackageRule[]}
+            subcategories={(packageSubcategories ?? []) as PackageSubcategory[]}
+          />
         </AdminSection>
 
         <AdminSection title="Textos da proposta" count={(proposalOptions ?? []).length}>

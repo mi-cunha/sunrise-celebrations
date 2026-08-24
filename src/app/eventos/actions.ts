@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { z } from "zod";
 import {
   contractedEventChecklistItemDeleteSchema,
   contractedEventChecklistItemMoveSchema,
@@ -13,10 +14,9 @@ import {
   contractedEventContractDocumentKindLabel,
   contractedEventContractDocumentSchema,
   contractedEventContractSchema,
-  contractedEventContractStatusLabel,
+  contractedEventNotesSchema,
   contractedEventPaymentDeleteSchema,
   contractedEventPaymentKindLabel,
-  contractedEventPaymentStatusLabel,
   contractedEventPaymentPlanSchema,
   contractedEventPaymentSchema,
   contractedEventPaymentUpdateSchema,
@@ -31,7 +31,7 @@ import {
   eventOperationalBriefSchema,
 } from "@/lib/domain/contracted-event";
 import { requireUser } from "@/lib/auth";
-import { formatCurrencyFromCents } from "@/lib/domain/quote";
+import { formatCurrencyFromCents, quoteEventAreaLabel } from "@/lib/domain/quote";
 
 export type ContractedEventFormState = {
   error?: string;
@@ -77,6 +77,33 @@ export async function updateContractedEventStatus(_: ContractedEventFormState, f
   return { success: "Status do evento atualizado.", version: Date.now() };
 }
 
+export async function updateContractedEventNotes(_: ContractedEventFormState, formData: FormData): Promise<ContractedEventFormState> {
+  const raw = {
+    eventId: String(formData.get("eventId") ?? ""),
+    notes: String(formData.get("notes") ?? ""),
+  };
+  const parsed = contractedEventNotesSchema.safeParse(raw);
+  if (!parsed.success) return { error: "Revise a observação do evento.", fieldErrors: parsed.error.flatten().fieldErrors, values: raw, version: Date.now() };
+
+  const { supabase, user } = await requireEventManager();
+  const { error } = await supabase
+    .from("contracted_events")
+    .update({ notes: parsed.data.notes ?? null })
+    .eq("id", parsed.data.eventId);
+  if (error) return { error: error.message, values: raw, version: Date.now() };
+
+  await supabase.from("contracted_event_history").insert({
+    event_id: parsed.data.eventId,
+    actor_id: user.id,
+    action: "Observação operacional atualizada",
+    metadata: {},
+  });
+
+  revalidatePath(`/eventos/${parsed.data.eventId}`);
+  revalidatePath(`/eventos/${parsed.data.eventId}/ficha`);
+  return { success: "Observação operacional atualizada.", version: Date.now() };
+}
+
 export async function toggleContractedEventChecklistItem(_: ContractedEventFormState, formData: FormData): Promise<ContractedEventFormState> {
   const parsed = contractedEventChecklistSchema.safeParse({
     itemId: formData.get("itemId"),
@@ -106,7 +133,7 @@ export async function addContractedEventChecklistItem(_: ContractedEventFormStat
     notes: String(formData.get("notes") ?? ""),
   };
   const parsed = contractedEventChecklistItemSchema.safeParse(raw);
-  if (!parsed.success) return { error: "Revise a tarefa.", fieldErrors: parsed.error.flatten().fieldErrors, values: raw, version: Date.now() };
+  if (!parsed.success) return { error: "Revise a pendência.", fieldErrors: parsed.error.flatten().fieldErrors, values: raw, version: Date.now() };
 
   const { supabase } = await requireEventManager();
   const { error } = await supabase.rpc("add_contracted_event_checklist_item", {
@@ -132,7 +159,7 @@ export async function updateContractedEventChecklistItem(_: ContractedEventFormS
     notes: String(formData.get("notes") ?? ""),
   };
   const parsed = contractedEventChecklistItemUpdateSchema.safeParse(raw);
-  if (!parsed.success) return { error: "Revise a tarefa.", fieldErrors: parsed.error.flatten().fieldErrors, values: raw, version: Date.now() };
+  if (!parsed.success) return { error: "Revise a pendência.", fieldErrors: parsed.error.flatten().fieldErrors, values: raw, version: Date.now() };
 
   const { supabase } = await requireEventManager();
   const { data: eventId, error } = await supabase.rpc("update_contracted_event_checklist_item", {
@@ -153,7 +180,7 @@ export async function removeContractedEventChecklistItem(_: ContractedEventFormS
     eventId: formData.get("eventId"),
     itemId: formData.get("itemId"),
   });
-  if (!parsed.success) return { error: "Não foi possível identificar a tarefa.", version: Date.now() };
+  if (!parsed.success) return { error: "Não foi possível identificar a pendência.", version: Date.now() };
 
   const { supabase } = await requireEventManager();
   const { data: eventId, error } = await supabase.rpc("remove_contracted_event_checklist_item", {
@@ -171,7 +198,7 @@ export async function moveContractedEventChecklistItem(_: ContractedEventFormSta
     itemId: formData.get("itemId"),
     direction: formData.get("direction"),
   });
-  if (!parsed.success) return { error: "Não foi possível reordenar a tarefa.", version: Date.now() };
+  if (!parsed.success) return { error: "Não foi possível reordenar a pendência.", version: Date.now() };
 
   const { supabase } = await requireEventManager();
   const { data: eventId, error } = await supabase.rpc("move_contracted_event_checklist_item", {
@@ -204,15 +231,21 @@ export async function generateContractedEventContractDocument(_: ContractedEvent
   const raw = {
     eventId: String(formData.get("eventId") ?? ""),
     documentKind: String(formData.get("documentKind") ?? ""),
+    contractingPartyName: String(formData.get("contractingPartyName") ?? ""),
+    contractingPartyDocument: String(formData.get("contractingPartyDocument") ?? ""),
+    contractingPartyAddress: String(formData.get("contractingPartyAddress") ?? ""),
+    contractingPartyRepresentative: String(formData.get("contractingPartyRepresentative") ?? ""),
+    eventSchedule: String(formData.get("eventSchedule") ?? ""),
+    specialClauses: String(formData.get("specialClauses") ?? ""),
     notes: String(formData.get("notes") ?? ""),
   };
   const parsed = contractedEventContractDocumentSchema.safeParse(raw);
-  if (!parsed.success) return { error: "Revise os dados do contrato.", fieldErrors: parsed.error.flatten().fieldErrors, values: raw, version: Date.now() };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revise os dados do contrato.", fieldErrors: parsed.error.flatten().fieldErrors, values: raw, version: Date.now() };
 
-  const { supabase, user } = await requireContractDocumentManager();
+  const { supabase } = await requireContractDocumentManager();
   const { data, error } = await supabase
     .from("contracted_events")
-    .select("id,title,status,event_type,event_date,guest_count,billing_model,billing_notes,notes,leads(name,company,phone),quotes(title,total_amount_cents),contracted_event_contracts(status,signed_at,notes),contracted_event_payments(kind,status,amount_cents,due_date,paid_at,payment_method,notes)")
+    .select("id,title,status,event_type,event_date,event_area,guest_count,billing_model,billing_notes,notes,leads(name,company,phone),quotes(title,status,total_amount_cents,quote_packages(id,unit_price_cents,guest_count,notes,event_package_catalog(id,name,description,event_package_items(id,category,name,description,show_in_proposal,is_choice,choice_group,choice_min,choice_max)),quote_package_item_choices(package_item_id))),contracted_event_contracts(status,signed_at,notes),contracted_event_payments(kind,status,amount_cents,due_date,paid_at,payment_method,notes)")
     .eq("id", parsed.data.eventId)
     .maybeSingle();
 
@@ -220,41 +253,75 @@ export async function generateContractedEventContractDocument(_: ContractedEvent
   if (!data) return { error: "Evento não encontrado.", values: raw, version: Date.now() };
 
   const event = data as unknown as ContractDocumentEvent;
-  const contract = firstRecord(event.contracted_event_contracts);
+  if (event.quotes?.status !== "aprovado") {
+    return {
+      error: "O contrato fica disponível somente depois da aprovação do orçamento.",
+      values: raw,
+      version: Date.now(),
+    };
+  }
+  const quotePackages = asArray(event.quotes.quote_packages);
+  if (hasPendingContractPackageChoices(quotePackages)) {
+    return {
+      error: "Finalize as escolhas do pacote no orçamento antes de emitir o contrato.",
+      values: raw,
+      version: Date.now(),
+    };
+  }
+  const packageUnitPrice = quotePackages.find((packageItem) => (packageItem.unit_price_cents ?? 0) > 0)?.unit_price_cents ?? null;
+  if (!packageUnitPrice) {
+    return {
+      error: "O pacote precisa ter um valor por pessoa para calcular o adicional de convidado extra.",
+      values: raw,
+      version: Date.now(),
+    };
+  }
   const payments = [...(event.contracted_event_payments ?? [])].sort((left, right) => (left.due_date ?? "9999-12-31").localeCompare(right.due_date ?? "9999-12-31"));
-  const suggestedKind = parsed.data.documentKind === "auto" ? suggestContractDocumentKind(event, payments) : parsed.data.documentKind;
+  const suggestedKind = parsed.data.documentKind === "auto" ? suggestContractDocumentKind(event) : parsed.data.documentKind;
   const title = `${contractedEventContractDocumentKindLabel(suggestedKind)} - ${event.title}`;
   const content = buildContractDocumentContent({
-    contract: contract ?? undefined,
     event,
+    form: parsed.data,
     kind: suggestedKind,
-    notes: parsed.data.notes,
     payments,
   });
 
-  const { error: upsertError } = await supabase.from("contracted_event_documents").upsert(
-    {
-      event_id: parsed.data.eventId,
-      document_type: "contrato",
-      title,
-      content,
-      created_by: user.id,
-    },
-    { onConflict: "event_id,document_type" },
-  );
-  if (upsertError) return { error: upsertError.message, values: raw, version: Date.now() };
-
-  await supabase.from("contracted_event_history").insert({
-    event_id: parsed.data.eventId,
-    actor_id: user.id,
-    action: "Contrato gerado",
-    metadata: { document_kind: suggestedKind },
+  const { error: versionError } = await supabase.rpc("create_contract_document_version", {
+    p_event_id: parsed.data.eventId,
+    p_document_kind: suggestedKind,
+    p_title: title,
+    p_content: content,
   });
+  if (versionError) return { error: versionError.message, values: raw, version: Date.now() };
 
   revalidatePath("/contratos");
   revalidatePath(`/eventos/${parsed.data.eventId}`);
   revalidatePath(`/eventos/${parsed.data.eventId}/contrato`);
   redirect(`/eventos/${parsed.data.eventId}?contrato=1`);
+}
+
+const contractDocumentVersionActionSchema = z.object({ versionId: z.string().uuid() });
+
+export async function reviewContractDocumentVersion(_: ContractedEventFormState, formData: FormData): Promise<ContractedEventFormState> {
+  const parsed = contractDocumentVersionActionSchema.safeParse({ versionId: formData.get("versionId") });
+  if (!parsed.success) return { error: "Não foi possível identificar a versão.", version: Date.now() };
+  const { supabase } = await requireContractDocumentManager();
+  const { data: eventId, error } = await supabase.rpc("review_contract_document_version", { p_version_id: parsed.data.versionId });
+  if (error || !eventId) return { error: error?.message ?? "Não foi possível revisar a versão.", version: Date.now() };
+  revalidatePath(`/eventos/${eventId}`);
+  revalidatePath(`/eventos/${eventId}/contrato`);
+  return { success: "Versão revisada. Agora ela pode ser emitida.", version: Date.now() };
+}
+
+export async function issueContractDocumentVersion(_: ContractedEventFormState, formData: FormData): Promise<ContractedEventFormState> {
+  const parsed = contractDocumentVersionActionSchema.safeParse({ versionId: formData.get("versionId") });
+  if (!parsed.success) return { error: "Não foi possível identificar a versão.", version: Date.now() };
+  const { supabase } = await requireContractDocumentManager();
+  const { data: eventId, error } = await supabase.rpc("issue_contract_document_version", { p_version_id: parsed.data.versionId });
+  if (error || !eventId) return { error: error?.message ?? "Não foi possível emitir a versão.", version: Date.now() };
+  revalidatePath(`/eventos/${eventId}`);
+  revalidatePath(`/eventos/${eventId}/contrato`);
+  return { success: "Versão final emitida e pronta para impressão.", version: Date.now() };
 }
 
 export async function addContractedEventTimelineEntry(_: ContractedEventFormState, formData: FormData): Promise<ContractedEventFormState> {
@@ -643,20 +710,59 @@ function firstRecord<T>(value: T[] | T | null | undefined) {
   return value;
 }
 
+function asArray<T>(value: T[] | T | null | undefined): T[] {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
 type ContractDocumentEvent = {
   id: string;
   title: string;
   status: string;
   event_type: string | null;
   event_date: string | null;
+  event_area: string | null;
   guest_count: number | null;
   billing_model: string;
   billing_notes: string | null;
   notes: string | null;
   leads: { name: string; company: string | null; phone: string } | null;
-  quotes: { title: string; total_amount_cents: number } | null;
+  quotes: ContractDocumentQuote | null;
   contracted_event_contracts: { status: string; signed_at: string | null; notes: string | null }[] | { status: string; signed_at: string | null; notes: string | null } | null;
   contracted_event_payments: ContractDocumentPayment[] | null;
+};
+
+type ContractDocumentQuote = {
+  title: string;
+  status: string;
+  total_amount_cents: number;
+  quote_packages: ContractDocumentQuotePackage[] | ContractDocumentQuotePackage | null;
+};
+
+type ContractDocumentQuotePackage = {
+  id: string;
+  unit_price_cents: number | null;
+  guest_count: number | null;
+  notes: string | null;
+  event_package_catalog: {
+    id: string;
+    name: string;
+    description: string | null;
+    event_package_items: ContractDocumentPackageItem[] | null;
+  } | null;
+  quote_package_item_choices: { package_item_id: string }[] | null;
+};
+
+type ContractDocumentPackageItem = {
+  id: string;
+  category: string;
+  name: string;
+  description: string | null;
+  show_in_proposal: boolean;
+  is_choice: boolean;
+  choice_group: string | null;
+  choice_min: number | null;
+  choice_max: number | null;
 };
 
 type ContractDocumentPayment = {
@@ -669,95 +775,379 @@ type ContractDocumentPayment = {
   notes: string | null;
 };
 
-function suggestContractDocumentKind(event: ContractDocumentEvent, payments: ContractDocumentPayment[]) {
-  const totalAmount = event.quotes?.total_amount_cents ?? 0;
-  const hasInstallments = payments.filter((payment) => payment.status !== "cancelado").length > 1;
-  const hasOpenConsumption = event.billing_model === "consumo_aberto_pos_evento" || event.billing_model === "pre_pago_com_consumo_aberto";
+type ContractDocumentForm = {
+  contractingPartyName?: string;
+  contractingPartyDocument?: string;
+  contractingPartyAddress?: string;
+  contractingPartyRepresentative?: string;
+  eventSchedule?: string;
+  specialClauses?: string;
+  notes?: string;
+};
 
-  if (totalAmount >= 1500000 || (event.guest_count ?? 0) >= 80 || hasInstallments || hasOpenConsumption) return "contrato_completo";
-  if (totalAmount >= 500000 || (event.guest_count ?? 0) >= 30) return "termo_simplificado";
+function suggestContractDocumentKind(event: ContractDocumentEvent) {
+  const totalAmount = event.quotes?.total_amount_cents ?? 0;
+
+  if (event.billing_model === "consumo_aberto_pos_evento") return "aceite_proposta";
+  if (totalAmount >= 1500000 || (event.guest_count ?? 0) >= 80) return "contrato_completo";
+  if (totalAmount >= 500000 || (event.guest_count ?? 0) >= 30 || event.billing_model === "pre_pago_com_consumo_aberto") return "termo_simplificado";
   return "aceite_proposta";
 }
 
 function buildContractDocumentContent({
-  contract,
   event,
+  form,
   kind,
-  notes,
   payments,
 }: {
-  contract?: { status: string; signed_at: string | null; notes: string | null };
   event: ContractDocumentEvent;
+  form: ContractDocumentForm;
   kind: string;
-  notes?: string;
   payments: ContractDocumentPayment[];
 }) {
-  const paymentLines = payments.length
-    ? payments
+  const totalAmount = event.quotes?.total_amount_cents ?? 0;
+  const quotePackages = asArray(event.quotes?.quote_packages);
+  const packageUnitPrice = quotePackages.find((packageItem) => (packageItem.unit_price_cents ?? 0) > 0)?.unit_price_cents ?? 0;
+  const extraGuestFee = Math.round(packageUnitPrice * 1.2);
+  const leadName = form.contractingPartyName ?? event.leads?.company ?? event.leads?.name ?? "A preencher";
+  const packageLines = buildContractPackageLines(quotePackages);
+  const activePayments = payments.filter((payment) => payment.status !== "cancelado");
+  const paymentLines = activePayments.length
+    ? activePayments
         .map((payment) =>
           [
             `- ${contractedEventPaymentKindLabel(payment.kind)}: ${formatCurrencyFromCents(payment.amount_cents)}`,
-            `Status: ${contractedEventPaymentStatusLabel(payment.status)}`,
             payment.due_date ? `Vencimento: ${formatDate(payment.due_date)}` : "",
-            payment.paid_at ? `Pago em: ${formatDate(payment.paid_at)}` : "",
-            payment.payment_method ? `Forma: ${payment.payment_method}` : "",
-            payment.notes ? `Obs.: ${payment.notes}` : "",
           ]
             .filter(Boolean)
             .join(" | "),
         )
         .join("\n")
-    : "Nenhum pagamento cadastrado até o momento.";
+    : event.billing_model === "consumo_aberto_pos_evento"
+      ? "Consumo apurado e pago após o evento, conforme comandas e condições registradas para a operação."
+      : "Na ausência de plano de pagamento específico, a confirmação da data depende do pagamento de sinal mínimo de 20% (vinte por cento) do valor contratado, e o saldo total deverá estar quitado até 7 (sete) dias antes do evento.";
 
-  return [
-    `# ${contractedEventContractDocumentKindLabel(kind)} - ${event.title}`,
-    "Aviso: este documento é um texto-base operacional. Revise o contrato antes do envio e valide cláusulas jurídicas/fiscais com a pessoa responsável.",
+  const sections = [
+    `Pelo presente instrumento particular, as partes abaixo identificadas celebram o documento denominado ${contractedEventContractDocumentKindLabel(kind)}, regido pelas cláusulas e condições seguintes. A proposta final aprovada, o cardápio confirmado, os termos de uso do espaço e eventuais aditivos escritos integram este instrumento para todos os fins.`,
     [
-      "## Identificação",
-      `Contato/cliente: ${event.leads?.name ?? "Não informado"}`,
-      event.leads?.company ? `Empresa: ${event.leads.company}` : "",
-      event.leads?.phone ? `Telefone: ${event.leads.phone}` : "",
+      "## QUALIFICAÇÃO DAS PARTES",
+      `CONTRATANTE: ${leadName}, inscrito(a) no CPF/CNPJ sob o nº ${form.contractingPartyDocument ?? "A preencher"}, com endereço em ${form.contractingPartyAddress ?? "A preencher"}${form.contractingPartyRepresentative ? `, neste ato representado(a) por ${form.contractingPartyRepresentative}` : ""}${event.leads?.phone ? `, telefone/WhatsApp ${event.leads.phone}` : ""}, doravante denominado(a) CONTRATANTE.`,
+      "CONTRATADA: Sunrise Serviços de Bares e Restaurantes Ltda., pessoa jurídica de direito privado, inscrita no CNPJ sob o nº 05.904.097/0001-80, com sede na Av. Zezé Diogo, 4959, Praia do Futuro, Fortaleza/CE, doravante denominada SUNRISE CELEBRATIONS ou CONTRATADA.",
     ]
       .filter(Boolean)
       .join("\n"),
     [
-      "## Evento",
-      `Tipo: ${event.event_type ?? "Não informado"}`,
+      "## CLÁUSULA PRIMEIRA - DO OBJETO E DOS DOCUMENTOS INTEGRANTES",
+      "1.1. O presente instrumento tem por objeto a prestação de serviços para realização do evento descrito na cláusula seguinte, conforme o escopo, o pacote, o cardápio, as escolhas finais e as condições comerciais aprovadas pela CONTRATANTE.",
+      "1.2. Integram este contrato, independentemente de transcrição: (i) a proposta final aprovada; (ii) o cardápio e as escolhas confirmadas; (iii) os termos de uso do espaço; e (iv) os aditivos aceitos por escrito pelas partes.",
+      "1.3. Em caso de divergência, prevalecem os aditivos mais recentes, este contrato e, em seguida, a proposta final aprovada.",
+    ].join("\n"),
+    [
+      "## CLÁUSULA SEGUNDA - DOS DADOS DO EVENTO",
+      `Tipo de evento: ${event.event_type ?? "A definir"}`,
       `Data: ${event.event_date ? formatDate(event.event_date) : "A definir"}`,
-      `Convidados: ${event.guest_count ? String(event.guest_count) : "A definir"}`,
+      `Horário: ${form.eventSchedule ?? "A definir"}`,
+      "Endereço: Av. Zezé Diogo, 4959, Praia do Futuro, Fortaleza/CE, CEP 60182-026",
+      `Área do evento: ${quoteEventAreaLabel(event.event_area)}`,
+      `Quantidade prevista de convidados: ${event.guest_count ? `${event.guest_count} pessoas` : "A definir"}`,
       `Modelo de cobrança: ${contractedEventBillingModelLabel(event.billing_model)}`,
       event.billing_notes ? `Observações de cobrança: ${event.billing_notes}` : "",
     ]
       .filter(Boolean)
       .join("\n"),
     [
-      "## Condições comerciais",
-      `Orçamento aprovado: ${event.quotes ? formatCurrencyFromCents(event.quotes.total_amount_cents) : "Não informado"}`,
-      "Validade comercial considerada conforme proposta aprovada.",
-      "A execução do evento depende de confirmação de disponibilidade, alinhamento operacional, contrato/termo revisado e pagamentos conforme combinado.",
+      "## CLÁUSULA TERCEIRA - DO PACOTE E DOS SERVIÇOS INCLUSOS",
+      "3.1. O pacote, os itens fixos e as escolhas confirmadas pela CONTRATANTE constam do Anexo I, parte integrante deste instrumento.",
+      "3.1. Integram a execução, quando previstos na proposta: mobiliário operacional disponível, materiais de serviço, utensílios, equipe compatível, limpeza e suporte durante o evento.",
+      "3.2. Marcas, sabores, apresentações e itens sujeitos à sazonalidade poderão ser substituídos por equivalentes de padrão semelhante, mediante alinhamento prévio quando a alteração for relevante.",
     ].join("\n"),
-    ["## Pagamentos previstos", paymentLines].join("\n"),
     [
-      "## Pontos para revisão humana",
-      "Confirmar dados completos do contratante.",
-      "Confirmar endereço/local, horário de início e término, política de cancelamento, remarcação, consumo aberto, perdas/danos e responsabilidades.",
-      "Confirmar necessidade de nota fiscal, ISS, retenções ou condições tributárias aplicáveis.",
-      "Confirmar anexos, pacote contratado, itens inclusos e itens fora do escopo.",
+      "## CLÁUSULA QUARTA - DOS SERVIÇOS NÃO INCLUSOS E DOS EXTRAS",
+      "4.1. Não estão incluídos serviços, personalizações, horas extras, fornecedores externos, decoração, atrações, equipamentos ou consumos que não constem expressamente da proposta aprovada, deste contrato ou de aditivo.",
+      "4.2. Todo acréscimo dependerá de disponibilidade, orçamento complementar e aprovação escrita da CONTRATANTE antes da execução.",
     ].join("\n"),
-    contract
-      ? [
-          "## Status interno do contrato",
-          `Status: ${contractedEventContractStatusLabel(contract.status)}`,
-          contract.signed_at ? `Assinado em: ${formatDate(contract.signed_at)}` : "Assinatura: pendente ou não registrada",
-          contract.notes ? `Observações: ${contract.notes}` : "",
-        ]
-          .filter(Boolean)
-          .join("\n")
-      : "## Status interno do contrato\nContrato ainda sem status registrado.",
-    notes ? `## Observações adicionadas na geração\n${notes}` : "",
-  ]
+    [
+      "## CLÁUSULA QUINTA - DO VALOR, DA RESERVA E DO PAGAMENTO",
+      `Valor aprovado: ${totalAmount > 0 ? formatCurrencyFromCents(totalAmount) : "A preencher"}`,
+      `Condições de pagamento registradas no sistema:\n${paymentLines}`,
+      "5.1. A reserva da data somente será considerada confirmada após o cumprimento da condição de entrada ou sinal definida entre as partes.",
+      "5.2. O atraso de qualquer parcela autoriza a CONTRATADA, após comunicação à CONTRATANTE, a suspender preparativos ou a execução até a regularização, sem afastar os custos já assumidos.",
+      "Dados bancários para pagamento: Banco Santander, agência 4389, conta corrente 13002414-3. Pix/CNPJ: 05.904.097/0001-80. Favorecido: Sunrise Serviços de Bares e Restaurantes Ltda.",
+    ].join("\n"),
+    [
+      "## CLÁUSULA SÉTIMA - DA QUANTIDADE DE CONVIDADOS",
+      `7.1. O contrato considera ${event.guest_count ? `${event.guest_count} convidados` : "quantidade de convidados a definir"}. Alterações poderão impactar estrutura, buffet, bebidas, equipe e valor final.`,
+      "7.2. A quantidade final deverá ser informada com antecedência mínima de 15 (quinze) dias. Acréscimos posteriores dependerão de capacidade, disponibilidade e pagamento complementar.",
+      "7.3. A redução de convidados após compras, contratações ou dimensionamento operacional não implica redução automática do valor contratado.",
+      "7.4. Crianças com menos de 7 (sete) anos não serão computadas como convidados pagantes, salvo condição específica expressamente registrada.",
+      `7.5. Cada convidado incluído além da quantidade contratada terá custo adicional de ${formatCurrencyFromCents(extraGuestFee)}, correspondente ao valor por pessoa do pacote acrescido de 20% (vinte por cento), sujeito à disponibilidade operacional.`,
+      kind !== "aceite_proposta" ? `7.6. Trabalhadores e prestadores de serviços externos que utilizem alimentação, bebidas ou estrutura operacional terão custo fixo de ${formatCurrencyFromCents(10000)} por pessoa.` : "",
+    ].join("\n"),
+    [
+      "## CLÁUSULA OITAVA - DO HORÁRIO, DA MONTAGEM E DAS HORAS EXTRAS",
+      "8.1. O evento observará o horário contratado. A permanência além do período acordado, inclusive por fornecedores, dependerá de autorização e poderá gerar cobrança de horas extras.",
+      "8.2. Horários e condições de montagem e desmontagem de decoração, equipamentos e fornecedores externos deverão ser aprovados previamente pela CONTRATADA.",
+    ].join("\n"),
+    [
+      "## CLÁUSULA NONA - DO USO DO ESPAÇO E DA CONDUTA",
+      "9.1. O espaço será utilizado exclusivamente para o evento identificado neste contrato, sendo vedada finalidade diversa sem autorização escrita.",
+      "9.2. A CONTRATANTE responderá pela conduta de seus convidados e deverá colaborar para a retirada de quem descumprir normas de segurança, causar risco, dano, perturbação ou constrangimento.",
+      "9.3. Materiais publicitários, ações de marca, equipamentos e alterações no ambiente dependem de autorização prévia da CONTRATADA.",
+    ].join("\n"),
+    [
+      "## CLÁUSULA DÉCIMA - DA CAPACIDADE, DA SEGURANÇA E DAS NORMAS INTERNAS",
+      "10.1. A CONTRATANTE declara ciência de que a capacidade do espaço, as rotas de circulação e as orientações de segurança deverão ser respeitadas por todos os participantes e fornecedores.",
+      "10.2. A CONTRATADA poderá adotar medidas necessárias à preservação das pessoas e do patrimônio, inclusive interromper atividade que apresente risco ou viole norma aplicável.",
+    ].join("\n"),
+    [
+      "## CLÁUSULA DÉCIMA PRIMEIRA - DA LIMPEZA, DA DECORAÇÃO E DO PATRIMÔNIO",
+      "11.1. A CONTRATADA manterá o serviço de limpeza e a organização das áreas abrangidas pelo escopo durante o evento.",
+      "11.2. A decoração não poderá obstruir saídas, equipamentos de segurança ou danificar pisos, paredes, mobiliário e instalações. Fixações e estruturas dependerão de autorização prévia.",
+      "11.3. A CONTRATANTE responderá pelos danos comprovadamente causados por si, seus convidados ou fornecedores, assegurado o direito de verificação e apresentação dos custos de reparo.",
+    ].join("\n"),
+    [
+      "## CLÁUSULA DÉCIMA SEGUNDA - DAS OBRIGAÇÕES DA CONTRATADA",
+      "- Disponibilizar a estrutura e os serviços contratados.",
+      "- Coordenar a execução operacional dos serviços internos.",
+      "- Manter equipe compatível com o pacote contratado.",
+      "- Zelar por limpeza, organização, segurança operacional e suporte durante o evento, conforme escopo aprovado.",
+    ].join("\n"),
+    [
+      "## CLÁUSULA DÉCIMA TERCEIRA - DAS OBRIGAÇÕES DA CONTRATANTE",
+      "- Efetuar os pagamentos nas datas acordadas.",
+      "- Informar dados corretos sobre evento, convidados, horários e fornecedores externos.",
+      "- Respeitar normas internas, horários, capacidade e orientações de segurança do espaço.",
+      "- Responsabilizar-se por danos causados por convidados, fornecedores externos ou terceiros vinculados ao evento.",
+    ].join("\n"),
+    [
+      "## CLÁUSULA DÉCIMA QUARTA - DOS FORNECEDORES EXTERNOS",
+      "14.1. A entrada de fornecedores externos dependerá de autorização prévia. A CONTRATANTE informará identificação, serviço, responsáveis e horários de chegada, montagem e desmontagem.",
+      "14.2. A CONTRATADA não responde por atrasos, vícios, danos ou falhas de fornecedores contratados diretamente pela CONTRATANTE, sem prejuízo das medidas de segurança e controle do espaço.",
+    ].join("\n"),
+    [
+      "## CLÁUSULA DÉCIMA QUINTA - DO CANCELAMENTO, DO REAGENDAMENTO E DA FORÇA MAIOR",
+      "15.1. Cancelamento ou reagendamento solicitado pela CONTRATANTE será analisado conforme a antecedência, o bloqueio da data, as compras, as contratações e os custos administrativos e operacionais já assumidos.",
+      "15.2. Valores pagos poderão ser retidos na medida dos custos e compromissos já incorridos. Eventual crédito para nova data dependerá de disponibilidade e acordo escrito.",
+      "15.3. Se o cancelamento decorrer exclusivamente da CONTRATADA, sem inadimplemento da CONTRATANTE, os valores recebidos serão restituídos conforme a legislação aplicável e o acerto formal entre as partes.",
+      "15.4. Caso fortuito ou força maior que impeça a realização ensejará tentativa prioritária de reagendamento. As partes definirão por escrito a nova data e o tratamento dos custos comprovadamente já assumidos.",
+    ].join("\n"),
+    [
+      "## CLÁUSULA DÉCIMA SEXTA - DAS ALTERAÇÕES E COMUNICAÇÕES",
+      "16.1. Alterações de escopo, pacote, cardápio, valores, datas, horários ou responsabilidades somente terão validade quando registradas por escrito, inclusive por meio eletrônico que permita comprovar autoria e conteúdo.",
+      "16.2. A tolerância de uma parte quanto ao descumprimento de obrigação não importará renúncia, novação ou alteração contratual.",
+      form.specialClauses ? `Condições específicas: ${form.specialClauses}` : "",
+      form.notes ? `Observações contratuais adicionais: ${form.notes}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    [
+      "## CLÁUSULA DÉCIMA SÉTIMA - DA VIGÊNCIA E DA RESCISÃO",
+      "17.1. Este contrato entra em vigor na data de sua assinatura e permanece válido até o integral cumprimento das obrigações das partes.",
+      "17.2. O descumprimento de obrigação essencial, não sanado após comunicação, poderá ensejar rescisão, sem prejuízo da apuração de valores devidos e perdas comprovadas, observada a legislação aplicável.",
+    ].join("\n"),
+    [
+      "## CLÁUSULA DÉCIMA OITAVA - DO FORO",
+      "Fica eleito o Foro da Comarca de Fortaleza, Estado do Ceará, para dirimir dúvidas ou controvérsias decorrentes deste contrato, ressalvadas hipóteses legais de competência obrigatória.",
+      "E, por estarem de acordo, as partes assinam o presente instrumento, juntamente com duas testemunhas, admitida a assinatura eletrônica na forma da legislação aplicável.",
+      "Fortaleza/CE, ____ de __________________________ de ________.",
+    ].join("\n"),
+    [
+      "## ASSINATURAS",
+      "________________________________________",
+      "SUNRISE SERVIÇOS DE BARES E RESTAURANTES LTDA.",
+      "CONTRATADA - CNPJ 05.904.097/0001-80",
+      "",
+      "________________________________________",
+      leadName,
+      `CONTRATANTE - CPF/CNPJ ${form.contractingPartyDocument ?? "A preencher"}`,
+      "",
+      "________________________________________",
+      "TESTEMUNHA 1 - Nome:",
+      "CPF:",
+      "",
+      "________________________________________",
+      "TESTEMUNHA 2 - Nome:",
+      "CPF:",
+    ].join("\n"),
+    [
+      "## ANEXO I - PACOTE, ITENS E ESCOLHAS CONFIRMADAS",
+      packageLines || "Nenhum pacote foi associado ao orçamento. A proposta final aprovada permanece como referência do escopo contratado.",
+    ].join("\n"),
+  ];
+
+  if (kind === "aceite_proposta") {
+    return buildConsentTermContent({ event, form, leadName, packageLines, paymentLines, totalAmount });
+  }
+
+  return renumberContractSections(selectContractSections(sections, kind))
     .filter(Boolean)
     .join("\n\n");
+}
+
+function buildConsentTermContent({ event, form, leadName, packageLines, paymentLines, totalAmount }: {
+  event: ContractDocumentEvent;
+  form: ContractDocumentForm;
+  leadName: string;
+  packageLines: string;
+  paymentLines: string;
+  totalAmount: number;
+}) {
+  return [
+    "Por este termo, a pessoa identificada abaixo confirma que recebeu, conferiu e aceita as condições essenciais da proposta aprovada para a realização do evento.",
+    [
+      "## IDENTIFICAÇÃO",
+      `Responsável: ${leadName}`,
+      `CPF/CNPJ: ${form.contractingPartyDocument ?? "A preencher"}`,
+      event.leads?.phone ? `Telefone/WhatsApp: ${event.leads.phone}` : "",
+    ].filter(Boolean).join("\n"),
+    [
+      "## DADOS DO EVENTO",
+      `Tipo: ${event.event_type ?? "A definir"}`,
+      `Data: ${event.event_date ? formatDate(event.event_date) : "A definir"}`,
+      `Horário: ${form.eventSchedule ?? "A definir"}`,
+      "Local: Av. Zezé Diogo, 4959, Praia do Futuro, Fortaleza/CE, CEP 60182-026",
+      `Área: ${quoteEventAreaLabel(event.event_area)}`,
+      `Convidados: ${event.guest_count ? `${event.guest_count} pessoas` : "A definir"}`,
+    ].join("\n"),
+    [
+      "## PROPOSTA ACEITA",
+      packageLines || "A proposta final aprovada define o pacote, os itens e as escolhas do evento.",
+      `Valor total: ${totalAmount > 0 ? formatCurrencyFromCents(totalAmount) : "A preencher"}`,
+      `Condições de pagamento:\n${paymentLines}`,
+    ].join("\n"),
+    [
+      "## CONDIÇÕES ESSENCIAIS",
+      "A data é confirmada após o cumprimento da condição de sinal acordada. Alterações de data, convidados, horário, pacote ou itens dependem de disponibilidade e podem alterar o valor.",
+      "Cancelamentos e reagendamentos serão tratados conforme a antecedência e os custos já assumidos pela Sunrise Celebrations.",
+      "A pessoa responsável declara ciência das regras de uso do espaço e responde pela conduta de convidados e fornecedores externos.",
+      form.specialClauses ? `Condição específica: ${form.specialClauses}` : "",
+      form.notes ? `Observação: ${form.notes}` : "",
+    ].filter(Boolean).join("\n"),
+    [
+      "## ACEITE",
+      "Declaro que li e aceito a proposta e as condições acima.",
+      "Fortaleza/CE, ____ de __________________________ de ________.",
+      "",
+      "________________________________________",
+      leadName,
+      "RESPONSÁVEL PELO EVENTO",
+      "",
+      "________________________________________",
+      "SUNRISE SERVIÇOS DE BARES E RESTAURANTES LTDA.",
+    ].join("\n"),
+  ].join("\n\n");
+}
+
+function selectContractSections(sections: string[], kind: string) {
+  if (kind === "contrato_completo") return sections;
+
+  const simplifiedOmissions = ["DA CAPACIDADE, DA SEGURANÇA", "DA LIMPEZA, DA DECORAÇÃO", "DA VIGÊNCIA E DA RESCISÃO"];
+  const consentSections = [
+    "DO OBJETO E DOS DOCUMENTOS",
+    "DOS DADOS DO EVENTO",
+    "DO PACOTE E DOS SERVIÇOS",
+    "DO VALOR, DA RESERVA",
+    "DA QUANTIDADE DE CONVIDADOS",
+    "DO HORÁRIO, DA MONTAGEM",
+    "DO USO DO ESPAÇO",
+    "DAS OBRIGAÇÕES DA CONTRATANTE",
+    "DOS FORNECEDORES EXTERNOS",
+    "DO CANCELAMENTO, DO REAGENDAMENTO",
+    "DAS ALTERAÇÕES E COMUNICAÇÕES",
+    "DO FORO",
+  ];
+
+  return sections.filter((section) => {
+    if (!section.startsWith("## CLÁUSULA")) return true;
+    if (kind === "termo_simplificado") return !simplifiedOmissions.some((title) => section.includes(title));
+    return consentSections.some((title) => section.includes(title));
+  });
+}
+
+function renumberContractSections(sections: string[]) {
+  const ordinals = [
+    "PRIMEIRA",
+    "SEGUNDA",
+    "TERCEIRA",
+    "QUARTA",
+    "QUINTA",
+    "SEXTA",
+    "SÉTIMA",
+    "OITAVA",
+    "NONA",
+    "DÉCIMA",
+    "DÉCIMA PRIMEIRA",
+    "DÉCIMA SEGUNDA",
+    "DÉCIMA TERCEIRA",
+    "DÉCIMA QUARTA",
+    "DÉCIMA QUINTA",
+    "DÉCIMA SEXTA",
+    "DÉCIMA SÉTIMA",
+    "DÉCIMA OITAVA",
+  ];
+  let clauseIndex = 0;
+  return sections.map((section) => {
+    if (!section.startsWith("## CLÁUSULA")) return section;
+    const clauseNumber = clauseIndex + 1;
+    const ordinal = ordinals[clauseIndex] ?? String(clauseNumber);
+    clauseIndex += 1;
+    return section
+      .replace(/^## CLÁUSULA .*? - /, `## CLÁUSULA ${ordinal} - `)
+      .replace(/^\d+\.(\d+)\./gm, `${clauseNumber}.$1.`);
+  });
+}
+
+function buildContractPackageLines(packages: ContractDocumentQuotePackage[]) {
+  if (!packages.length) return "";
+  return packages
+    .map((packageItem) => {
+      const catalog = packageItem.event_package_catalog;
+      const selectedIds = new Set((packageItem.quote_package_item_choices ?? []).map((choice) => choice.package_item_id));
+      const items = (catalog?.event_package_items ?? []).filter((item) => item.show_in_proposal);
+      const fixedItems = items.filter((item) => !item.is_choice);
+      const choiceItems = items.filter((item) => item.is_choice);
+      const chosenItems = choiceItems.filter((item) => selectedIds.has(item.id));
+
+      return [
+        `Pacote: ${catalog?.name ?? "Pacote sem nome"}`,
+        catalog?.description ? `Descrição: ${catalog.description}` : "",
+        packageItem.guest_count ? `Convidados/base: ${packageItem.guest_count}` : "",
+        fixedItems.length ? `Itens inclusos:\n${formatContractPackageItems(fixedItems)}` : "",
+        chosenItems.length ? `Escolhas confirmadas pela contratante:\n${formatContractPackageItems(chosenItems)}` : "",
+        packageItem.notes ? `Observações do pacote: ${packageItem.notes}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+    })
+    .join("\n\n");
+}
+
+function formatContractPackageItems(items: ContractDocumentPackageItem[]) {
+  const groups = items.reduce((result, item) => {
+    const current = result.get(item.category) ?? [];
+    current.push(item.name);
+    result.set(item.category, current);
+    return result;
+  }, new Map<string, string[]>());
+  return Array.from(groups.entries())
+    .map(([category, names]) => `- ${category}: ${names.join("; ")}.`)
+    .join("\n");
+}
+
+function hasPendingContractPackageChoices(packages: ContractDocumentQuotePackage[]) {
+  return packages.some((packageItem) => {
+    const selectedIds = new Set((packageItem.quote_package_item_choices ?? []).map((choice) => choice.package_item_id));
+    const choiceItems = (packageItem.event_package_catalog?.event_package_items ?? []).filter((item) => item.show_in_proposal && item.is_choice);
+    const groups = choiceItems.reduce((result, item) => {
+      const group = item.choice_group || item.category;
+      const current = result.get(group) ?? { minimum: item.choice_min ?? 0, selected: 0 };
+      current.minimum = Math.max(current.minimum, item.choice_min ?? 0);
+      if (selectedIds.has(item.id)) current.selected += 1;
+      result.set(group, current);
+      return result;
+    }, new Map<string, { minimum: number; selected: number }>());
+    return Array.from(groups.values()).some((group) => group.minimum > group.selected);
+  });
 }
 
 function formatDate(value: string) {

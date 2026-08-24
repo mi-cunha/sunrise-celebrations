@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SetupNotice } from "@/components/setup-notice";
 import { contractedEventBillingModelLabel, contractedEventStatusLabel, contractedEventVendorStatusLabel } from "@/lib/domain/contracted-event";
+import { quoteEventAreaLabel } from "@/lib/domain/quote";
 import { requireUser } from "@/lib/auth";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { PrintButton } from "./print-button";
@@ -11,6 +12,7 @@ type EventOperationalBrief = {
   title: string;
   status: string;
   event_type: string | null;
+  event_area: string | null;
   event_date: string | null;
   guest_count: number | null;
   billing_model: string;
@@ -32,6 +34,11 @@ type QuotePackage = {
   id: string;
   notes: string | null;
   event_package_catalog: EventPackageOption | null;
+  quote_package_item_choices: QuotePackageItemChoice[] | QuotePackageItemChoice | null;
+};
+
+type QuotePackageItemChoice = {
+  package_item_id: string;
 };
 
 type EventPackageOption = {
@@ -47,6 +54,10 @@ type EventPackageItem = {
   name: string;
   description: string | null;
   show_in_operational_brief: boolean;
+  is_choice: boolean;
+  choice_group: string | null;
+  choice_min: number | null;
+  choice_max: number | null;
 };
 
 type TimelineEntry = {
@@ -97,7 +108,7 @@ export default async function EventOperationalBriefPage({ params }: { params: Pr
   const { supabase } = await requireUser();
   const { data: event, error } = await supabase
     .from("contracted_events")
-    .select("id,title,status,event_type,event_date,guest_count,billing_model,billing_notes,notes,leads(name,company,phone),quotes(quote_packages(id,notes,event_package_catalog(id,name,description,event_package_items(id,category,name,description,show_in_operational_brief)))),contracted_event_timeline(id,title,start_time,end_time,location,assigned_to,notes,sort_order,assigned_profile:profiles!contracted_event_timeline_assigned_to_fkey(display_name)),contracted_event_vendors(id,category,name,contact_name,phone,email,status,notes),contracted_event_checklist(id,title,is_done,sort_order,assigned_to,due_date,notes,assigned_profile:profiles!contracted_event_checklist_assigned_to_fkey(display_name)),contracted_event_documents(id,title,document_type,updated_at)")
+    .select("id,title,status,event_type,event_area,event_date,guest_count,billing_model,billing_notes,notes,leads(name,company,phone),quotes(quote_packages(id,notes,event_package_catalog(id,name,description,event_package_items(id,category,name,description,show_in_operational_brief,is_choice,choice_group,choice_min,choice_max)),quote_package_item_choices(package_item_id))),contracted_event_timeline(id,title,start_time,end_time,location,assigned_to,notes,sort_order,assigned_profile:profiles!contracted_event_timeline_assigned_to_fkey(display_name)),contracted_event_vendors(id,category,name,contact_name,phone,email,status,notes),contracted_event_checklist(id,title,is_done,sort_order,assigned_to,due_date,notes,assigned_profile:profiles!contracted_event_checklist_assigned_to_fkey(display_name)),contracted_event_documents(id,title,document_type,updated_at)")
     .eq("id", id)
     .maybeSingle();
 
@@ -123,6 +134,10 @@ export default async function EventOperationalBriefPage({ params }: { params: Pr
   const operationalPackageItems = asArray(selectedPackage?.event_package_catalog?.event_package_items)
     .filter((item) => item.show_in_operational_brief)
     .sort((left, right) => left.name.localeCompare(right.name, "pt-BR"));
+  const selectedChoiceIds = new Set(asArray(selectedPackage?.quote_package_item_choices).map((choice) => choice.package_item_id));
+  const fixedOperationalPackageItems = operationalPackageItems.filter((item) => !item.is_choice);
+  const selectedOperationalChoiceItems = operationalPackageItems.filter((item) => item.is_choice && selectedChoiceIds.has(item.id));
+  const hasUndefinedOperationalChoices = operationalPackageItems.some((item) => item.is_choice) && selectedChoiceIds.size === 0;
   const document = detail.contracted_event_documents?.find((item) => item.document_type === "ficha_operacional");
   if (!document) notFound();
 
@@ -130,7 +145,7 @@ export default async function EventOperationalBriefPage({ params }: { params: Pr
     <main className="bg-[#eef5fb] px-4 py-6 text-[#0b2742] print:bg-white print:p-0">
       <div className="mx-auto mb-4 flex max-w-4xl items-center justify-between gap-3 print:hidden">
         <Link href={`/eventos/${detail.id}`} className="text-sm font-semibold text-[#1f5f8b] underline">
-          ? Voltar ao evento
+          Voltar ao evento
         </Link>
         <PrintButton />
       </div>
@@ -162,10 +177,11 @@ export default async function EventOperationalBriefPage({ params }: { params: Pr
           </div>
         </section>
 
-        <section className="grid gap-4 px-8 py-7 md:grid-cols-3 md:px-12 print:break-inside-avoid">
+        <section className="grid gap-4 px-8 py-7 md:grid-cols-4 md:px-12 print:break-inside-avoid">
           <InfoCard label="Tipo" value={detail.event_type ?? "A definir"} />
           <InfoCard label="Data" value={formatDate(detail.event_date)} />
           <InfoCard label="Convidados" value={detail.guest_count ? `${detail.guest_count} pessoas` : "A definir"} />
+          <InfoCard label="Área" value={quoteEventAreaLabel(detail.event_area)} />
         </section>
 
         <section className="px-8 pb-7 md:px-12 print:break-inside-avoid">
@@ -194,9 +210,9 @@ export default async function EventOperationalBriefPage({ params }: { params: Pr
                   <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">{selectedPackage.notes}</p>
                 </div>
               )}
-              {operationalPackageItems.length > 0 && (
+              {fixedOperationalPackageItems.length > 0 && (
                 <div className="mt-5 grid gap-3 md:grid-cols-2">
-                  {operationalPackageItems.map((item) => (
+                  {fixedOperationalPackageItems.map((item) => (
                     <div key={item.id} className="rounded-xl bg-white p-4 ring-1 ring-[#d7e5ef]">
                       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#1f5f8b]">{categoryLabel(item.category)}</p>
                       <p className="mt-1 font-semibold">{item.name}</p>
@@ -204,6 +220,23 @@ export default async function EventOperationalBriefPage({ params }: { params: Pr
                     </div>
                   ))}
                 </div>
+              )}
+              {selectedOperationalChoiceItems.length > 0 && (
+                <div className="mt-5">
+                  <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-[#1f5f8b]">Escolhas definidas</h3>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    {selectedOperationalChoiceItems.map((item) => (
+                      <div key={item.id} className="rounded-xl bg-white p-4 ring-1 ring-[#d7e5ef]">
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#1f5f8b]">{categoryLabel(item.category)}</p>
+                        <p className="mt-1 font-semibold">{item.name}</p>
+                        {item.description && <p className="mt-1 text-sm leading-6 text-slate-600">{item.description}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {hasUndefinedOperationalChoices && (
+                <p className="mt-5 rounded-xl bg-[#fff5e6] p-4 text-sm font-semibold text-[#744c15]">Atenção: este pacote tem escolhas do cliente ainda não definidas no orçamento.</p>
               )}
             </section>
           )}
@@ -263,7 +296,7 @@ export default async function EventOperationalBriefPage({ params }: { params: Pr
                   <div key={item.id} className="grid gap-3 border-b border-[#d7e5ef] px-5 py-4 last:border-0 md:grid-cols-[42px_1fr_160px_150px] print:break-inside-avoid">
                     <div className="pt-0.5">
                       <span className={`grid h-6 w-6 place-items-center rounded border text-sm font-bold ${item.is_done ? "border-[#356451] bg-[#356451] text-white" : "border-[#9dad9f] bg-white text-transparent"}`}>
-                        ?
+                        &#10003;
                       </span>
                     </div>
                     <div>
@@ -275,7 +308,7 @@ export default async function EventOperationalBriefPage({ params }: { params: Pr
                   </div>
                 ))
               ) : (
-                <p className="p-5 text-sm text-slate-600">Nenhuma tarefa cadastrada.</p>
+                <p className="p-5 text-sm text-slate-600">Nenhuma pendência cadastrada.</p>
               )}
             </div>
           </section>
@@ -332,7 +365,7 @@ function normalizeTime(value: string | null | undefined) {
 function timelineTimeLabel(entry: TimelineEntry) {
   const start = normalizeTime(entry.start_time);
   const end = normalizeTime(entry.end_time);
-  if (start && end) return `${start}  ${end}`;
+  if (start && end) return `${start} - ${end}`;
   if (start) return start;
   if (end) return `Até ${end}`;
   return "A definir";

@@ -63,6 +63,27 @@ const packageItemSchema = z.object({
   description: z.string().trim().max(800, "Use até 800 caracteres.").optional(),
   showInProposal: z.boolean(),
   showInOperationalBrief: z.boolean(),
+  isChoice: z.boolean(),
+  choiceGroup: z.string().trim().max(120, "Use até 120 caracteres.").optional(),
+  choiceMin: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => (!value ? null : Number(value)))
+    .refine((value) => value === null || (Number.isInteger(value) && value >= 0), "Informe um mínimo válido."),
+  choiceMax: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => (!value ? null : Number(value)))
+    .refine((value) => value === null || (Number.isInteger(value) && value >= 1), "Informe um máximo válido."),
+}).superRefine((value, context) => {
+  if (value.isChoice && !value.choiceGroup) {
+    context.addIssue({ code: "custom", message: "Informe o grupo de escolha.", path: ["choiceGroup"] });
+  }
+  if (value.isChoice && value.choiceMin !== null && value.choiceMax !== null && value.choiceMin > value.choiceMax) {
+    context.addIssue({ code: "custom", message: "O mínimo não pode ser maior que o máximo.", path: ["choiceMin"] });
+  }
 });
 
 const packageItemUpdateSchema = packageItemSchema.extend({
@@ -73,12 +94,59 @@ const packageItemDeleteSchema = z.object({
   id: z.string().uuid(),
 });
 
+const packageSubcategorySchema = z.object({
+  category: z.enum(["buffet", "bebida", "servico", "estrutura", "decoracao", "observacao", "outro"]),
+  name: z.string().trim().min(2, "Informe a subcategoria.").max(120, "Use até 120 caracteres."),
+  description: z.string().trim().max(800, "Use até 800 caracteres.").optional(),
+});
+
+const packageLibraryItemSchema = z.object({
+  subcategoryId: z.string().uuid(),
+  name: z.string().trim().min(2, "Informe o item.").max(160, "Use até 160 caracteres."),
+  proposalDescription: z.string().trim().max(800, "Use até 800 caracteres.").optional(),
+  operationalDescription: z.string().trim().max(800, "Use até 800 caracteres.").optional(),
+  showInProposal: z.boolean(),
+  showInOperationalBrief: z.boolean(),
+});
+
+const packageRuleSchema = z
+  .object({
+    packageId: z.string().uuid(),
+    subcategoryId: z.string().uuid(),
+    itemIds: z.array(z.string().uuid()).default([]),
+    title: z.string().trim().max(160, "Use até 160 caracteres.").optional(),
+    selectionMin: z
+      .string()
+      .trim()
+      .optional()
+      .transform((value) => (!value ? 0 : Number(value)))
+      .refine((value) => Number.isInteger(value) && value >= 0, "Informe um mínimo válido."),
+    selectionMax: z
+      .string()
+      .trim()
+      .optional()
+      .transform((value) => (!value ? 0 : Number(value)))
+      .refine((value) => Number.isInteger(value) && value >= 0, "Informe um máximo válido."),
+    isRequired: z.boolean(),
+  })
+  .superRefine((value, context) => {
+    if (value.selectionMax > 0 && value.selectionMin > value.selectionMax) {
+      context.addIssue({ code: "custom", message: "O mínimo não pode ser maior que o máximo.", path: ["selectionMin"] });
+    }
+  });
+
+const packageRuleItemSchema = z.object({
+  ruleId: z.string().uuid(),
+  itemId: z.string().uuid(),
+});
+
 export type OptionFormState = { error?: string; success?: string; kind?: "event_type" | "lead_source"; name?: string };
 export type LogoFormState = { error?: string; success?: string; logoUrl?: string };
 export type ProposalOptionFormState = { error?: string; success?: string; title?: string; content?: string };
 export type QuoteItemCatalogOptionFormState = { error?: string; success?: string; name?: string; description?: string; defaultUnitPrice?: string };
 export type PackageCatalogFormState = { error?: string; success?: string; id?: string; eventType?: string; eventTypes?: string[]; name?: string; description?: string; basePrice?: string; proposalNotes?: string; operationNotes?: string };
-export type PackageItemFormState = { error?: string; success?: string; packageId?: string; category?: string; name?: string; description?: string };
+export type PackageItemFormState = { error?: string; success?: string; packageId?: string; category?: string; name?: string; description?: string; isChoice?: string; choiceGroup?: string; choiceMin?: string; choiceMax?: string };
+export type PackageModelFormState = { error?: string; success?: string; id?: string; category?: string; subcategoryId?: string; packageId?: string; ruleId?: string; itemId?: string; name?: string; description?: string; proposalDescription?: string; operationalDescription?: string; title?: string; selectionMin?: string; selectionMax?: string };
 export type CatalogMutationState = { error?: string; success?: string; id?: string };
 
 export async function createOption(_: OptionFormState, formData: FormData): Promise<OptionFormState> {
@@ -257,9 +325,13 @@ export async function createEventPackageItem(_: PackageItemFormState, formData: 
     description: String(formData.get("description") ?? ""),
     showInProposal: formData.get("showInProposal") === "on",
     showInOperationalBrief: formData.get("showInOperationalBrief") === "on",
+    isChoice: formData.get("isChoice") === "on",
+    choiceGroup: String(formData.get("choiceGroup") ?? ""),
+    choiceMin: String(formData.get("choiceMin") ?? ""),
+    choiceMax: String(formData.get("choiceMax") ?? ""),
   };
   const parsed = packageItemSchema.safeParse(raw);
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revise o item do pacote.", packageId: raw.packageId, category: raw.category, name: raw.name, description: raw.description };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revise o item do pacote.", packageId: raw.packageId, category: raw.category, name: raw.name, description: raw.description, isChoice: raw.isChoice ? "on" : "", choiceGroup: raw.choiceGroup, choiceMin: raw.choiceMin, choiceMax: raw.choiceMax };
 
   const { supabase, permissions } = await requireUser();
   if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
@@ -272,9 +344,13 @@ export async function createEventPackageItem(_: PackageItemFormState, formData: 
     description: parsed.data.description || null,
     show_in_proposal: parsed.data.showInProposal,
     show_in_operational_brief: parsed.data.showInOperationalBrief,
+    is_choice: parsed.data.isChoice,
+    choice_group: parsed.data.isChoice ? parsed.data.choiceGroup : null,
+    choice_min: parsed.data.isChoice ? parsed.data.choiceMin : null,
+    choice_max: parsed.data.isChoice ? parsed.data.choiceMax : null,
     sort_order: sortOrder ?? 100,
   });
-  if (error) return { error: "Não foi possível salvar o item do pacote.", packageId: parsed.data.packageId, category: parsed.data.category, name: parsed.data.name, description: parsed.data.description ?? "" };
+  if (error) return { error: "Não foi possível salvar o item do pacote.", packageId: parsed.data.packageId, category: parsed.data.category, name: parsed.data.name, description: parsed.data.description ?? "", isChoice: parsed.data.isChoice ? "on" : "", choiceGroup: parsed.data.choiceGroup ?? "", choiceMin: raw.choiceMin, choiceMax: raw.choiceMax };
 
   revalidatePath("/admin/opcoes");
   return { success: "Item adicionado ao pacote.", packageId: parsed.data.packageId };
@@ -289,9 +365,13 @@ export async function updateEventPackageItem(_: PackageItemFormState, formData: 
     description: String(formData.get("description") ?? ""),
     showInProposal: formData.get("showInProposal") === "on",
     showInOperationalBrief: formData.get("showInOperationalBrief") === "on",
+    isChoice: formData.get("isChoice") === "on",
+    choiceGroup: String(formData.get("choiceGroup") ?? ""),
+    choiceMin: String(formData.get("choiceMin") ?? ""),
+    choiceMax: String(formData.get("choiceMax") ?? ""),
   };
   const parsed = packageItemUpdateSchema.safeParse(raw);
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revise o item do pacote.", packageId: raw.packageId, category: raw.category, name: raw.name, description: raw.description };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revise o item do pacote.", packageId: raw.packageId, category: raw.category, name: raw.name, description: raw.description, isChoice: raw.isChoice ? "on" : "", choiceGroup: raw.choiceGroup, choiceMin: raw.choiceMin, choiceMax: raw.choiceMax };
 
   const { supabase, permissions } = await requireUser();
   if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
@@ -304,9 +384,13 @@ export async function updateEventPackageItem(_: PackageItemFormState, formData: 
       description: parsed.data.description || null,
       show_in_proposal: parsed.data.showInProposal,
       show_in_operational_brief: parsed.data.showInOperationalBrief,
+      is_choice: parsed.data.isChoice,
+      choice_group: parsed.data.isChoice ? parsed.data.choiceGroup : null,
+      choice_min: parsed.data.isChoice ? parsed.data.choiceMin : null,
+      choice_max: parsed.data.isChoice ? parsed.data.choiceMax : null,
     })
     .eq("id", parsed.data.id);
-  if (error) return { error: "Não foi possível atualizar o item do pacote.", packageId: parsed.data.packageId, category: parsed.data.category, name: parsed.data.name, description: parsed.data.description ?? "" };
+  if (error) return { error: "Não foi possível atualizar o item do pacote.", packageId: parsed.data.packageId, category: parsed.data.category, name: parsed.data.name, description: parsed.data.description ?? "", isChoice: parsed.data.isChoice ? "on" : "", choiceGroup: parsed.data.choiceGroup ?? "", choiceMin: raw.choiceMin, choiceMax: raw.choiceMax };
 
   revalidatePath("/admin/opcoes");
   return { success: "Item do pacote atualizado.", packageId: parsed.data.packageId };
@@ -327,6 +411,130 @@ export async function removeEventPackageItem(_: PackageItemFormState, formData: 
 
   revalidatePath("/admin/opcoes");
   return { success: "Item do pacote removido.", packageId };
+}
+
+export async function createPackageSubcategory(_: PackageModelFormState, formData: FormData): Promise<PackageModelFormState> {
+  const raw = {
+    category: String(formData.get("category") ?? ""),
+    name: String(formData.get("name") ?? ""),
+    description: String(formData.get("description") ?? ""),
+  };
+  const parsed = packageSubcategorySchema.safeParse(raw);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revise a subcategoria.", ...raw };
+
+  const { supabase, permissions } = await requireUser();
+  if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
+
+  const { error } = await supabase.from("event_package_subcategories").insert({
+    category: parsed.data.category,
+    name: parsed.data.name,
+    description: parsed.data.description || null,
+  });
+  if (error) return { error: error.code === "23505" ? "Essa subcategoria já existe nessa categoria." : "Não foi possível salvar a subcategoria.", ...raw };
+
+  revalidatePath("/admin/opcoes");
+  return { success: "Subcategoria criada." };
+}
+
+export async function createPackageLibraryItem(_: PackageModelFormState, formData: FormData): Promise<PackageModelFormState> {
+  const raw = {
+    subcategoryId: String(formData.get("subcategoryId") ?? ""),
+    name: String(formData.get("name") ?? ""),
+    proposalDescription: String(formData.get("proposalDescription") ?? ""),
+    operationalDescription: String(formData.get("operationalDescription") ?? ""),
+    showInProposal: formData.get("showInProposal") === "on",
+    showInOperationalBrief: formData.get("showInOperationalBrief") === "on",
+  };
+  const parsed = packageLibraryItemSchema.safeParse(raw);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revise o item.", subcategoryId: raw.subcategoryId, name: raw.name, proposalDescription: raw.proposalDescription, operationalDescription: raw.operationalDescription };
+
+  const { supabase, permissions } = await requireUser();
+  if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
+
+  const { error } = await supabase.from("event_package_item_catalog").insert({
+    subcategory_id: parsed.data.subcategoryId,
+    name: parsed.data.name,
+    proposal_description: parsed.data.proposalDescription || null,
+    operational_description: parsed.data.operationalDescription || null,
+    show_in_proposal: parsed.data.showInProposal,
+    show_in_operational_brief: parsed.data.showInOperationalBrief,
+  });
+  if (error) return { error: error.code === "23505" ? "Esse item já existe nessa subcategoria." : "Não foi possível salvar o item.", subcategoryId: raw.subcategoryId, name: raw.name, proposalDescription: raw.proposalDescription, operationalDescription: raw.operationalDescription };
+
+  revalidatePath("/admin/opcoes");
+  return { success: "Item criado na biblioteca." };
+}
+
+export async function createPackageRule(_: PackageModelFormState, formData: FormData): Promise<PackageModelFormState> {
+  const raw = {
+    packageId: String(formData.get("packageId") ?? ""),
+    subcategoryId: String(formData.get("subcategoryId") ?? ""),
+    itemIds: formData.getAll("itemIds").map(String),
+    title: String(formData.get("title") ?? ""),
+    selectionMin: String(formData.get("selectionMin") ?? ""),
+    selectionMax: String(formData.get("selectionMax") ?? ""),
+    isRequired: formData.get("isRequired") === "on",
+  };
+  const parsed = packageRuleSchema.safeParse(raw);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revise a regra do pacote.", packageId: raw.packageId, subcategoryId: raw.subcategoryId, title: raw.title, selectionMin: raw.selectionMin, selectionMax: raw.selectionMax };
+
+  const { supabase, permissions } = await requireUser();
+  if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
+
+  if (parsed.data.itemIds.length > 0) {
+    const { count, error: itemCheckError } = await supabase
+      .from("event_package_item_catalog")
+      .select("id", { count: "exact", head: true })
+      .eq("subcategory_id", parsed.data.subcategoryId)
+      .in("id", parsed.data.itemIds);
+    if (itemCheckError || count !== parsed.data.itemIds.length) {
+      return { error: "Selecione apenas itens da subcategoria escolhida.", packageId: raw.packageId, subcategoryId: raw.subcategoryId, title: raw.title, selectionMin: raw.selectionMin, selectionMax: raw.selectionMax };
+    }
+  }
+
+  const { data: createdRule, error } = await supabase.from("event_package_rules").insert({
+    package_id: parsed.data.packageId,
+    subcategory_id: parsed.data.subcategoryId,
+    title: parsed.data.title || null,
+    selection_min: parsed.data.selectionMin,
+    selection_max: parsed.data.selectionMax,
+    is_required: parsed.data.isRequired,
+  }).select("id").single();
+  if (error) return { error: error.code === "23505" ? "Essa subcategoria já está configurada neste pacote." : "Não foi possível salvar a regra.", packageId: raw.packageId, subcategoryId: raw.subcategoryId, title: raw.title, selectionMin: raw.selectionMin, selectionMax: raw.selectionMax };
+
+  if (createdRule && parsed.data.itemIds.length > 0) {
+    const { error: itemError } = await supabase.from("event_package_rule_items").insert(
+      parsed.data.itemIds.map((itemId) => ({
+        package_rule_id: createdRule.id,
+        item_catalog_id: itemId,
+      })),
+    );
+    if (itemError) return { error: "Regra criada, mas não foi possível associar os itens.", packageId: raw.packageId, subcategoryId: raw.subcategoryId };
+  }
+
+  revalidatePath("/admin/opcoes");
+  return { success: "Regra criada no pacote." };
+}
+
+export async function attachPackageRuleItem(_: PackageModelFormState, formData: FormData): Promise<PackageModelFormState> {
+  const raw = {
+    ruleId: String(formData.get("ruleId") ?? ""),
+    itemId: String(formData.get("itemId") ?? ""),
+  };
+  const parsed = packageRuleItemSchema.safeParse(raw);
+  if (!parsed.success) return { error: "Selecione regra e item.", ruleId: raw.ruleId, itemId: raw.itemId };
+
+  const { supabase, permissions } = await requireUser();
+  if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
+
+  const { error } = await supabase.from("event_package_rule_items").insert({
+    package_rule_id: parsed.data.ruleId,
+    item_catalog_id: parsed.data.itemId,
+  });
+  if (error) return { error: error.code === "23505" ? "Esse item já está associado a essa regra." : "Não foi possível associar o item.", ruleId: raw.ruleId, itemId: raw.itemId };
+
+  revalidatePath("/admin/opcoes");
+  return { success: "Item associado ao pacote.", ruleId: parsed.data.ruleId };
 }
 
 export async function updateOptionCatalogItem(_: CatalogMutationState, formData: FormData): Promise<CatalogMutationState> {

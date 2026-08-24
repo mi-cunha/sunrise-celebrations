@@ -8,7 +8,7 @@ import { contractedEventStatusLabel } from "@/lib/domain/contracted-event";
 import { quoteStatusLabel, formatCurrencyFromCents } from "@/lib/domain/quote";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { requireUser } from "@/lib/auth";
-import { QuoteEditLockForm, QuoteItemEditor, QuoteItemForm, QuotePackageForm, QuoteStatusForm } from "./quote-forms";
+import { QuoteEditLockForm, QuoteEventAreaForm, QuoteItemEditor, QuoteItemForm, QuotePackageForm, QuoteStatusForm } from "./quote-forms";
 import { QuoteProposalOptionsPanel } from "./quote-proposal-options-panel";
 
 type QuoteDetail = {
@@ -16,6 +16,7 @@ type QuoteDetail = {
   title: string;
   status: string;
   event_type: string | null;
+  event_area: string | null;
   desired_date: string | null;
   guest_count: number | null;
   notes: string | null;
@@ -48,6 +49,14 @@ type EventPackageItem = {
   description: string | null;
   show_in_proposal: boolean;
   show_in_operational_brief: boolean;
+  is_choice: boolean;
+  choice_group: string | null;
+  choice_min: number | null;
+  choice_max: number | null;
+};
+
+type QuotePackageItemChoice = {
+  package_item_id: string;
 };
 
 type EventPackageOption = {
@@ -68,6 +77,7 @@ type QuotePackage = {
   total_price_cents: number;
   notes: string | null;
   event_package_catalog: EventPackageOption | null;
+  quote_package_item_choices: QuotePackageItemChoice[] | QuotePackageItemChoice | null;
 };
 
 type QuoteHistory = {
@@ -111,7 +121,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
 
   const { data: quote, error } = await supabase
     .from("quotes")
-    .select("id,title,status,event_type,desired_date,guest_count,notes,total_amount_cents,sent_at,approved_at,refused_at,decision_reason,admin_edit_unlocked,created_at,leads(id,name,company,phone),quote_items(id,description,quantity,unit_price_cents),quote_packages(id,package_id,unit_price_cents,guest_count,total_price_cents,notes,event_package_catalog(id,event_type,event_types,name,description,base_price_cents,event_package_items(id,category,name,description,show_in_proposal,show_in_operational_brief))),quote_proposal_options(id,title,content),quote_history(id,action,metadata,created_at,profiles(display_name)),contracted_events(id,status)")
+    .select("id,title,status,event_type,event_area,desired_date,guest_count,notes,total_amount_cents,sent_at,approved_at,refused_at,decision_reason,admin_edit_unlocked,created_at,leads(id,name,company,phone),quote_items(id,description,quantity,unit_price_cents),quote_packages(id,package_id,unit_price_cents,guest_count,total_price_cents,notes,event_package_catalog(id,event_type,event_types,name,description,base_price_cents,event_package_items(id,category,name,description,show_in_proposal,show_in_operational_brief,is_choice,choice_group,choice_min,choice_max)),quote_package_item_choices(package_item_id)),quote_proposal_options(id,title,content),quote_history(id,action,metadata,created_at,profiles(display_name)),contracted_events(id,status)")
     .eq("id", id)
     .maybeSingle();
   const { data: proposalCatalogOptions } = await supabase.from("proposal_option_catalog").select("id,title,content").eq("is_active", true).order("sort_order").order("title");
@@ -129,7 +139,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
   const detail = quote as unknown as QuoteDetail;
   const packageRequest = supabase
     .from("event_package_catalog")
-    .select("id,event_type,event_types,name,description,base_price_cents,event_package_items(id,category,name,description,show_in_proposal,show_in_operational_brief)")
+    .select("id,event_type,event_types,name,description,base_price_cents,event_package_items(id,category,name,description,show_in_proposal,show_in_operational_brief,is_choice,choice_group,choice_min,choice_max)")
     .eq("is_active", true)
     .order("sort_order")
     .order("name");
@@ -215,6 +225,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
               </div>
             </div>
             {detail.notes && <p className="mt-5 whitespace-pre-wrap border-t border-slate-100 pt-4 text-slate-700">{detail.notes}</p>}
+            <QuoteEventAreaForm canEdit={canEditQuote} eventArea={detail.event_area} quoteId={detail.id} />
             {(detail.approved_at || detail.refused_at || detail.sent_at || detail.decision_reason) && (
               <dl className="mt-5 grid gap-3 border-t border-slate-100 pt-4 text-sm sm:grid-cols-2">
                 {detail.sent_at && <DecisionInfo label="Enviado em" value={formatDateTime(detail.sent_at)} />}

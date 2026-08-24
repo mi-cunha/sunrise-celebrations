@@ -1,8 +1,8 @@
 "use client";
 
 import { useActionState } from "react";
-import { formatCurrencyFromCents, quoteStatuses, quoteStatusLabel } from "@/lib/domain/quote";
-import { addQuoteItem, addQuoteProposalOption, removeQuoteItem, removeQuotePackage, removeQuoteProposalOption, setApprovedQuoteEditLock, setQuotePackage, updateQuoteItem, updateQuoteStatus, type QuoteFormState } from "../actions";
+import { formatCurrencyFromCents, quoteEventAreaLabel, quoteEventAreas, quoteStatuses, quoteStatusLabel } from "@/lib/domain/quote";
+import { addQuoteItem, addQuoteProposalOption, removeQuoteItem, removeQuotePackage, removeQuoteProposalOption, setApprovedQuoteEditLock, setQuotePackage, setQuotePackageChoices, updateQuoteEventArea, updateQuoteItem, updateQuoteStatus, type QuoteFormState } from "../actions";
 
 const initialState: QuoteFormState = {};
 
@@ -49,6 +49,14 @@ type EventPackageItem = {
   description: string | null;
   show_in_proposal: boolean;
   show_in_operational_brief: boolean;
+  is_choice: boolean;
+  choice_group: string | null;
+  choice_min: number | null;
+  choice_max: number | null;
+};
+
+type QuotePackageItemChoice = {
+  package_item_id: string;
 };
 
 type QuotePackage = {
@@ -59,7 +67,33 @@ type QuotePackage = {
   total_price_cents: number;
   notes: string | null;
   event_package_catalog: EventPackageOption | null;
+  quote_package_item_choices: QuotePackageItemChoice[] | QuotePackageItemChoice | null;
 };
+
+export function QuoteEventAreaForm({ canEdit, eventArea, quoteId }: { canEdit: boolean; eventArea: string | null; quoteId: string }) {
+  const [state, action, pending] = useActionState(updateQuoteEventArea, initialState);
+  const fieldErrors = state.fieldErrors ?? {};
+
+  return (
+    <form action={action} className="mt-4 border-t border-[#edf1ee] pt-4">
+      <input type="hidden" name="quoteId" value={quoteId} />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="flex-1">
+          <label htmlFor="quote-event-area">Área do evento</label>
+          <select id="quote-event-area" name="eventArea" defaultValue={state.values?.eventArea ?? eventArea ?? ""} disabled={!canEdit} className={fieldErrors.eventArea ? "border-red-500 bg-red-50" : ""}>
+            <option value="">Selecione a área</option>
+            {quoteEventAreas.map((area) => <option key={area} value={area}>{quoteEventAreaLabel(area)}</option>)}
+          </select>
+          {fieldErrors.eventArea?.[0] && <p className="mt-1 text-sm text-red-700">{fieldErrors.eventArea[0]}</p>}
+        </div>
+        {canEdit && <button disabled={pending} className="rounded-lg bg-[#18352d] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#23483d] disabled:opacity-60">{pending ? "Salvando..." : "Salvar área"}</button>}
+      </div>
+      <p className="mt-2 text-xs text-slate-500">Endereço fixo: Av. Zezé Diogo, 4959, Praia do Futuro, CEP 60182-026.</p>
+      {state.error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">{state.error}</p>}
+      {state.success && <p role="status" className="mt-3 rounded-lg bg-[#edf5ee] p-3 text-sm text-[#356451]">{state.success}</p>}
+    </form>
+  );
+}
 
 export function QuotePackageForm({
   canEdit,
@@ -78,6 +112,7 @@ export function QuotePackageForm({
   const [removeState, removeAction, removePending] = useActionState(removeQuotePackage, initialState);
   const selectedOption = selectedPackage?.event_package_catalog;
   const selectedItems = asArray(selectedOption?.event_package_items);
+  const selectedChoiceIds = new Set(asArray(selectedPackage?.quote_package_item_choices).map((choice) => choice.package_item_id));
 
   function handlePackageChange(event: React.ChangeEvent<HTMLSelectElement>) {
     const selected = packageOptions.find((option) => option.id === event.currentTarget.value);
@@ -133,6 +168,15 @@ export function QuotePackageForm({
         </div>
       )}
 
+      {selectedPackage && selectedOption && selectedItems.some((item) => item.is_choice) && (
+        <QuotePackageChoicesForm
+          canEdit={canEdit}
+          items={selectedItems}
+          quoteId={quoteId}
+          selectedChoiceIds={selectedChoiceIds}
+        />
+      )}
+
       {!canEdit && <p className="mt-4 rounded-lg bg-slate-100 p-3 text-sm text-slate-700">Edição bloqueada para orçamento aprovado.</p>}
       {canEdit && (
         <>
@@ -179,6 +223,56 @@ export function QuotePackageForm({
         </>
       )}
     </section>
+  );
+}
+
+function QuotePackageChoicesForm({
+  canEdit,
+  items,
+  quoteId,
+  selectedChoiceIds,
+}: {
+  canEdit: boolean;
+  items: EventPackageItem[];
+  quoteId: string;
+  selectedChoiceIds: Set<string>;
+}) {
+  const [state, action, pending] = useActionState(setQuotePackageChoices, initialState);
+  const choiceGroups = groupChoiceItems(items);
+
+  return (
+    <form action={action} className="mt-4 rounded-lg border border-[#dbe3dc] bg-[#f8fbfd] p-4">
+      <input type="hidden" name="quoteId" value={quoteId} />
+      <div>
+        <h3 className="font-semibold">Escolhas para proposta final</h3>
+        <p className="mt-1 text-sm text-slate-600">Marque o que o cliente escolheu. Enquanto nada estiver marcado, a proposta fica provisória e mostra “Escolha entre...”.</p>
+      </div>
+      <div className="mt-4 space-y-4">
+        {choiceGroups.map((group) => (
+          <fieldset key={group.name} className="rounded-lg border border-[#dbe3dc] bg-white p-3">
+            <legend className="px-1 text-sm font-semibold text-[#18352d]">{choiceGroupInstruction(group)}</legend>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {group.items.map((item) => (
+                <label key={item.id} className="!mb-0 !flex items-start gap-2 rounded-lg border border-[#edf1ee] px-3 py-2 text-sm font-medium">
+                  <input type="checkbox" name="packageItemIds" value={item.id} defaultChecked={selectedChoiceIds.has(item.id)} disabled={!canEdit} className="mt-0.5 !h-4 !w-4" />
+                  <span>
+                    {item.name}
+                    {item.description && <span className="mt-0.5 block text-xs font-normal text-slate-500">{item.description}</span>}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        ))}
+      </div>
+      {state.error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">{state.error}</p>}
+      {state.success && <p role="status" className="mt-4 rounded-lg bg-[#edf5ee] p-3 text-sm text-[#356451]">{state.success}</p>}
+      {canEdit && (
+        <button disabled={pending} className="mt-4 rounded-lg bg-[#18352d] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#23483d] disabled:opacity-60">
+          {pending ? "Salvando..." : "Salvar escolhas"}
+        </button>
+      )}
+    </form>
   );
 }
 
@@ -482,6 +576,28 @@ function categoryLabel(category: string) {
 function asArray<T>(value: T[] | T | null | undefined) {
   if (!value) return [];
   return Array.isArray(value) ? value : [value];
+}
+
+function groupChoiceItems(items: EventPackageItem[]) {
+  const groups = new Map<string, { name: string; min: number | null; max: number | null; items: EventPackageItem[] }>();
+  for (const item of items) {
+    if (!item.is_choice) continue;
+    const name = item.choice_group?.trim() || "Escolhas do pacote";
+    const current = groups.get(name) ?? { name, min: item.choice_min, max: item.choice_max, items: [] };
+    current.min = current.min ?? item.choice_min;
+    current.max = current.max ?? item.choice_max;
+    current.items.push(item);
+    groups.set(name, current);
+  }
+  return Array.from(groups.values());
+}
+
+function choiceGroupInstruction(group: { name: string; min: number | null; max: number | null }) {
+  if (group.min && group.max && group.min === group.max) return `Escolha ${group.max}: ${group.name}`;
+  if (group.min && group.max) return `Escolha de ${group.min} a ${group.max}: ${group.name}`;
+  if (group.max) return `Escolha até ${group.max}: ${group.name}`;
+  if (group.min) return `Escolha ao menos ${group.min}: ${group.name}`;
+  return `Escolha entre: ${group.name}`;
 }
 
 function packageEventTypes(option: EventPackageOption) {

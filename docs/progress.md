@@ -10,6 +10,9 @@
 - [ ] Fase 1c evolução opcional: painel de acompanhamento comercial mais completo.
 - [x] Fase 2: orçamentos. Modelo de orçamento, criação a partir do lead, catálogo editável de serviços, itens, edição/remoção de itens, total, status, histórico, aprovação/recusa com motivo, trava pós-aprovação com liberação admin, proposta visual para impressão/PDF, logo configurável por arquivo e condições padronizadas de proposta.
 - [ ] Fase 3: contratação e operação. Iniciada: evento contratado criado a partir de orçamento aprovado, listagem de eventos, página de detalhe, status operacional, histórico, contrato e pagamentos com acesso financeiro, checklist operacional editável/reordenável com responsável, prazo e observações, cronograma operacional editável, fornecedores do evento, ficha operacional interna gerável, catálogo inicial de pacotes por tipo de evento e pacote conectado ao orçamento, proposta e ficha operacional.
+- [ ] Fase 3a: contratos e termos — sugestão de contrato completo, contrato simplificado ou termo de consentimento; rascunhos versionados, revisão humana obrigatória, emissão final e consulta de versões implementados. Pendente: templates configuráveis e sincronização completa dos estados enviado/assinado/cancelado com a versão emitida.
+- [ ] Fase 3b: financeiro e custos — recebimentos, parcelas, custos internos, comissões, margens e indicadores, protegidos pelas permissões `financeiro`, `gerencia` e `admin_owner`.
+- [ ] Fase 3c: hospitalidade e materiais — cortesias e materiais impressos planejados, com responsáveis, status, visibilidade e custo estimado integrado ao financeiro.
 - [ ] Fase 4: WhatsApp oficial como adaptador — webhooks, envio, templates aprovados e observabilidade, após a validação da Fase 1b.
 - [ ] Fase 5: multiempresa e comercialização.
 
@@ -28,9 +31,19 @@ Para avançar na fase de contratação/operação:
 1. Aplicar as migrations até `202608140017_event_contract_payments.sql`.
 2. Validar a criação de evento a partir de orçamento aprovado.
 3. Validar status operacional e checklist editável do evento contratado.
+4. Preservar os fluxos existentes de contatos, orçamentos e eventos durante a inclusão dos módulos da Fase 3a–3c.
+
+## Próximas fatias da Fase 3
+
+1. **Fase 3a — Contratos e termos:** modelar documentos e versões; implementar regras configuráveis que sugerem `contrato_completo`, `termo_simplificado` ou `aceite_proposta`; incluir revisão humana obrigatória antes do envio e geração de PDF.
+2. **Fase 3b — Financeiro e custos:** separar valores cobrados, recebidos, custos internos, cortesias e comissão; calcular receita, custo, margem e lucro estimados; aplicar acesso financeiro no servidor e RLS.
+3. **Fase 3c — Hospitalidade e materiais:** registrar cortesias, recepção, mesa, pós-evento e materiais simples; exigir custo estimado, responsável e status; refletir custos no financeiro e itens no checklist.
+
+O detalhamento completo do adendo está em `docs/addenda/contratos-financeiro-hospitalidade.md`.
 
 ## Pendências futuras registradas
 
+- Definir política de retenção documental: preservar versões emitidas/assinadas e avaliar arquivamento ou exclusão apenas de rascunhos antigos após prazo administrativo definido; não apagar automaticamente ao concluir o evento.
 - Incluir imagens por pacote na proposta: as imagens devem ficar em um banco/catálogo próprio e entrar automaticamente na proposta conforme o pacote escolhido.
 - Refinar a diagramação dos pacotes na proposta e na ficha operacional após testes com pacotes reais.
 - Criar uma página de ajuda/manual de uso do sistema, com linguagem simples para qualquer usuário entender fluxos como lead, atendimento, orçamento, proposta, evento contratado, checklist e ficha operacional.

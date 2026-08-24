@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import {
   contractedEventBillingModelLabel,
   contractedEventBillingModels,
@@ -32,14 +32,17 @@ import {
   generateContractedEventPaymentPlan,
   generateEventOperationalBrief,
   moveContractedEventChecklistItem,
+  issueContractDocumentVersion,
   removeContractedEventChecklistItem,
   removeContractedEventPayment,
   removeContractedEventTimelineEntry,
   removeContractedEventVendor,
+  reviewContractDocumentVersion,
   setContractedEventContract,
   toggleContractedEventChecklistItem,
   updateContractedEventBillingModel,
   updateContractedEventChecklistItem,
+  updateContractedEventNotes,
   updateContractedEventPayment,
   updateContractedEventStatus,
   updateContractedEventTimelineEntry,
@@ -92,6 +95,13 @@ type ContractForForm = {
 };
 
 type ContractDocumentForForm = {
+  id: string;
+  title: string;
+  version: number;
+  status: string;
+  created_at: string;
+  reviewed_at: string | null;
+  issued_at: string | null;
   updated_at: string;
 } | null;
 
@@ -137,6 +147,41 @@ export function ContractedEventStatusForm({ eventId, status }: { eventId: string
   );
 }
 
+export function ContractedEventNotesForm({ eventId, notes }: { eventId: string; notes: string | null }) {
+  const [state, action, pending] = useActionState(updateContractedEventNotes, initialState);
+  const fieldErrors = state.fieldErrors ?? {};
+
+  return (
+    <form action={action} className="rounded-lg border border-[#dbe3dc] bg-white p-4">
+      <input type="hidden" name="eventId" value={eventId} />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="font-semibold">Observação operacional</h2>
+          <p className="mt-1 text-sm text-slate-600">Entra na ficha operacional do evento.</p>
+        </div>
+        <button disabled={pending} className="rounded-lg bg-[#18352d] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#23483d] active:scale-[0.99] disabled:opacity-60">
+          {pending ? "Salvando..." : "Salvar"}
+        </button>
+      </div>
+      <div className="mt-4">
+        <label htmlFor="event-notes">Observação</label>
+        <textarea
+          id="event-notes"
+          name="notes"
+          rows={4}
+          defaultValue={state.values?.notes ?? notes ?? ""}
+          aria-invalid={Boolean(fieldErrors.notes)}
+          aria-describedby={fieldErrors.notes ? "event-notes-error" : undefined}
+          placeholder="Ex.: restrições do espaço, pontos de atenção para equipe, alinhamentos combinados com o cliente."
+        />
+        {fieldErrors.notes && <p id="event-notes-error" className="mt-1 text-sm text-red-700">{fieldErrors.notes[0]}</p>}
+      </div>
+      {state.error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">{state.error}</p>}
+      {state.success && <p role="status" className="mt-4 rounded-lg bg-[#edf5ee] p-3 text-sm text-[#356451]">{state.success}</p>}
+    </form>
+  );
+}
+
 export function ChecklistItemForm({ assignees, eventId }: { assignees: Assignee[]; eventId: string }) {
   const [state, action, pending] = useActionState(addContractedEventChecklistItem, initialState);
   const fieldErrors = state.fieldErrors ?? {};
@@ -144,7 +189,7 @@ export function ChecklistItemForm({ assignees, eventId }: { assignees: Assignee[
   return (
     <details className="mt-5 rounded-xl border border-[#dbe3dc] bg-[#fbf8f1]">
       <summary className="cursor-pointer list-none p-4 font-semibold text-[#18352d] transition hover:bg-white">
-        + Adicionar tarefa
+        + Adicionar pendência
       </summary>
       <form key={state.version ?? "new-checklist-item"} action={action} className="border-t border-[#edf1ee] bg-white p-4">
         <input type="hidden" name="eventId" value={eventId} />
@@ -152,7 +197,7 @@ export function ChecklistItemForm({ assignees, eventId }: { assignees: Assignee[
         {state.error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">{state.error}</p>}
         {state.success && <p role="status" className="mt-4 rounded-lg bg-[#edf5ee] p-3 text-sm text-[#356451]">{state.success}</p>}
         <button disabled={pending} className="mt-4 rounded-lg bg-[#18352d] px-5 py-3 font-semibold text-white transition hover:bg-[#23483d] active:scale-[0.99] disabled:opacity-60">
-          {pending ? "Adicionando..." : "Adicionar tarefa"}
+          {pending ? "Adicionando..." : "Adicionar pendência"}
         </button>
       </form>
     </details>
@@ -188,7 +233,7 @@ export function ChecklistItemCard({
             <input type="hidden" name="eventId" value={eventId} />
             <input type="hidden" name="itemId" value={item.id} />
             <label className="!mb-0 grid h-6 w-6 cursor-pointer place-items-center">
-              <span className="sr-only">{item.is_done ? "Reabrir tarefa" : "Concluir tarefa"}</span>
+              <span className="sr-only">{item.is_done ? "Reabrir pendência" : "Concluir pendência"}</span>
               <input type="checkbox" name="isDone" defaultChecked={item.is_done} disabled={togglePending} onChange={(event) => event.currentTarget.form?.requestSubmit()} className="peer sr-only" />
               <span className="grid h-5 w-5 place-items-center rounded border border-[#9dad9f] bg-white text-[13px] font-bold leading-none text-transparent transition peer-checked:border-[#356451] peer-checked:bg-[#356451] peer-checked:text-white">
                 ✓
@@ -226,7 +271,7 @@ export function ChecklistItemCard({
           {editState.error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">{editState.error}</p>}
           {editState.success && <p role="status" className="mt-4 rounded-lg bg-[#edf5ee] p-3 text-sm text-[#356451]">{editState.success}</p>}
           <button disabled={editPending} className="mt-4 rounded-lg bg-[#18352d] px-5 py-3 font-semibold text-white transition hover:bg-[#23483d] active:scale-[0.99] disabled:opacity-60">
-            {editPending ? "Salvando..." : "Salvar tarefa"}
+            {editPending ? "Salvando..." : "Salvar pendência"}
           </button>
         </form>
 
@@ -236,7 +281,7 @@ export function ChecklistItemCard({
           {removeState.error && <p role="alert" className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">{removeState.error}</p>}
           {removeState.success && <p role="status" className="mb-3 rounded-lg bg-[#edf5ee] p-3 text-sm text-[#356451]">{removeState.success}</p>}
           <button disabled={removePending} className="rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 active:scale-[0.99] disabled:opacity-60">
-            {removePending ? "Removendo..." : "Remover tarefa"}
+            {removePending ? "Removendo..." : "Remover pendência"}
           </button>
         </form>
       </div>
@@ -455,41 +500,114 @@ export function ContractForm({ contract, eventId }: { contract?: ContractForForm
 
 export function ContractDocumentForm({ document, eventId }: { document?: ContractDocumentForForm; eventId: string }) {
   const [state, action, pending] = useActionState(generateContractedEventContractDocument, initialState);
-  const fieldErrors = state.fieldErrors ?? {};
+  const [reviewState, reviewAction, reviewPending] = useActionState(reviewContractDocumentVersion, initialState);
+  const [issueState, issueAction, issuePending] = useActionState(issueContractDocumentVersion, initialState);
+  const fieldErrors = useMemo(() => state.fieldErrors ?? {}, [state.fieldErrors]);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    const firstInvalidField = Object.keys(fieldErrors).find((field) => fieldErrors[field]?.length);
+    if (!firstInvalidField) return;
+
+    const target = formRef.current?.querySelector<HTMLElement>(`[name="${firstInvalidField}"]`);
+    target?.focus();
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [fieldErrors]);
 
   return (
-    <details className="rounded-xl border border-[#dbe3dc] bg-white p-5" open={!document}>
+    <details className="rounded-xl border border-[#dbe3dc] bg-white p-5" open={!document || Boolean(state.error)}>
       <summary className="cursor-pointer list-none font-semibold text-[#18352d]">Documento do contrato</summary>
-      <form action={action} className="mt-4 border-t border-[#edf1ee] pt-4">
+      <form ref={formRef} action={action} className="mt-4 border-t border-[#edf1ee] pt-4">
         <input type="hidden" name="eventId" value={eventId} />
-        <p className="text-sm text-slate-600">Gere um texto-base para revisão humana. Cláusulas jurídicas e fiscais devem ser validadas antes do envio.</p>
-        <div className="mt-4 grid gap-4 md:grid-cols-[0.8fr_1.2fr]">
-          <div>
-            <label htmlFor="contract-document-kind">Tipo</label>
-            <select id="contract-document-kind" name="documentKind" defaultValue={state.values?.documentKind ?? "auto"}>
+        <p className="text-sm text-slate-600">Preencha os dados das partes e as condições específicas antes de emitir o contrato.</p>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="md:col-span-2">
+            <label htmlFor="contract-document-kind">Tipo de documento</label>
+            <select id="contract-document-kind" name="documentKind" defaultValue={state.values?.documentKind ?? "auto"} className={fieldErrors.documentKind ? "border-red-500 bg-red-50" : ""}>
               {contractedEventContractDocumentKinds.map((kind) => (
-                <option key={kind} value={kind}>
-                  {contractedEventContractDocumentKindLabel(kind)}
-                </option>
+                <option key={kind} value={kind}>{contractedEventContractDocumentKindLabel(kind)}</option>
               ))}
             </select>
+            <p className="mt-1 text-xs text-slate-500">No automático: consumo aberto gera termo; eventos médios geram contrato simplificado; eventos maiores geram contrato completo.</p>
             {fieldErrors.documentKind?.[0] && <p className="mt-1 text-sm text-red-700">{fieldErrors.documentKind[0]}</p>}
           </div>
           <div>
-            <label htmlFor="contract-document-notes">Observações para incluir</label>
-            <textarea id="contract-document-notes" name="notes" rows={3} defaultValue={state.values?.notes ?? ""} placeholder="Ex.: condições específicas, pontos de revisão ou orientação comercial." />
+            <label htmlFor="contract-contractingPartyName">Contratante</label>
+            <input id="contract-contractingPartyName" name="contractingPartyName" defaultValue={state.values?.contractingPartyName ?? ""} placeholder="Nome completo ou razão social" className={fieldErrors.contractingPartyName ? "border-red-500 bg-red-50" : ""} />
+            {fieldErrors.contractingPartyName?.[0] && <p className="mt-1 text-sm text-red-700">{fieldErrors.contractingPartyName[0]}</p>}
+          </div>
+          <div>
+            <label htmlFor="contract-contractingPartyDocument">CPF/CNPJ</label>
+            <input
+              id="contract-contractingPartyDocument"
+              name="contractingPartyDocument"
+              defaultValue={state.values?.contractingPartyDocument ?? ""}
+              placeholder="CPF ou CNPJ do contratante"
+              inputMode="numeric"
+              maxLength={18}
+              onChange={(event) => {
+                event.currentTarget.value = formatCpfCnpj(event.currentTarget.value);
+              }}
+              className={fieldErrors.contractingPartyDocument ? "border-red-500 bg-red-50" : ""}
+            />
+            {fieldErrors.contractingPartyDocument?.[0] && <p className="mt-1 text-sm text-red-700">{fieldErrors.contractingPartyDocument[0]}</p>}
+          </div>
+          <div className="md:col-span-2">
+            <label htmlFor="contract-contractingPartyAddress">Endereço do contratante</label>
+            <input id="contract-contractingPartyAddress" name="contractingPartyAddress" defaultValue={state.values?.contractingPartyAddress ?? ""} placeholder="Rua, número, bairro, cidade/UF" className={fieldErrors.contractingPartyAddress ? "border-red-500 bg-red-50" : ""} />
+            {fieldErrors.contractingPartyAddress?.[0] && <p className="mt-1 text-sm text-red-700">{fieldErrors.contractingPartyAddress[0]}</p>}
+          </div>
+          <div>
+            <label htmlFor="contract-contractingPartyRepresentative">Representante</label>
+            <input id="contract-contractingPartyRepresentative" name="contractingPartyRepresentative" defaultValue={state.values?.contractingPartyRepresentative ?? ""} placeholder="Quando for empresa" className={fieldErrors.contractingPartyRepresentative ? "border-red-500 bg-red-50" : ""} />
+            {fieldErrors.contractingPartyRepresentative?.[0] && <p className="mt-1 text-sm text-red-700">{fieldErrors.contractingPartyRepresentative[0]}</p>}
+          </div>
+          <div>
+            <label htmlFor="contract-eventSchedule">Horário do evento</label>
+            <input id="contract-eventSchedule" name="eventSchedule" defaultValue={state.values?.eventSchedule ?? ""} placeholder="Ex.: 17h às 22h" className={fieldErrors.eventSchedule ? "border-red-500 bg-red-50" : ""} />
+            {fieldErrors.eventSchedule?.[0] && <p className="mt-1 text-sm text-red-700">{fieldErrors.eventSchedule[0]}</p>}
+          </div>
+          <div className="md:col-span-2">
+            <label htmlFor="contract-specialClauses">Cláusulas ou ajustes específicos</label>
+            <textarea id="contract-specialClauses" name="specialClauses" rows={4} defaultValue={state.values?.specialClauses ?? ""} placeholder="Ex.: consumo aberto, restrições, fornecedores externos, itens extras aprovados." className={fieldErrors.specialClauses ? "border-red-500 bg-red-50" : ""} />
+            {fieldErrors.specialClauses?.[0] && <p className="mt-1 text-sm text-red-700">{fieldErrors.specialClauses[0]}</p>}
+          </div>
+          <div className="md:col-span-2">
+            <label htmlFor="contract-document-notes">Observações contratuais adicionais</label>
+            <textarea id="contract-document-notes" name="notes" rows={3} defaultValue={state.values?.notes ?? ""} placeholder="Somente informações que devem constar no documento enviado à contratante." />
             {fieldErrors.notes?.[0] && <p className="mt-1 text-sm text-red-700">{fieldErrors.notes[0]}</p>}
           </div>
         </div>
-        {document && <p className="mt-3 text-xs text-slate-500">Última versão gerada em {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(document.updated_at))}.</p>}
+        {document && (
+          <div className="mt-4 rounded-lg border border-[#dbe3dc] bg-[#f8fbfd] p-3 text-sm">
+            <p className="font-semibold">Versão {document.version} · {contractDocumentVersionStatusLabel(document.status)}</p>
+            <p className="mt-1 text-xs text-slate-500">Gerada em {formatDateTime(document.created_at)}. Uma nova geração cria outra versão e preserva esta.</p>
+            {document.status === "rascunho" && (
+              <button formAction={reviewAction} name="versionId" value={document.id} disabled={reviewPending} className="mt-3 rounded-lg border border-[#0f5f8f] bg-white px-3 py-2 text-xs font-semibold text-[#0f5f8f] hover:bg-[#eef6fb] disabled:opacity-60">{reviewPending ? "Revisando..." : "Confirmar revisão humana"}</button>
+            )}
+            {document.status === "revisado" && (
+              <button formAction={issueAction} name="versionId" value={document.id} disabled={issuePending} className="mt-3 rounded-lg bg-[#0f5f8f] px-3 py-2 text-xs font-semibold text-white hover:bg-[#083653] disabled:opacity-60">{issuePending ? "Emitindo..." : "Emitir versão final"}</button>
+            )}
+            {(reviewState.error || issueState.error) && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-2 text-xs text-red-800">{reviewState.error ?? issueState.error}</p>}
+            {(reviewState.success || issueState.success) && <p role="status" className="mt-3 rounded-lg bg-[#edf5ee] p-2 text-xs text-[#356451]">{reviewState.success ?? issueState.success}</p>}
+          </div>
+        )}
         {state.error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">{state.error}</p>}
         {state.success && <p role="status" className="mt-4 rounded-lg bg-[#edf5ee] p-3 text-sm text-[#356451]">{state.success}</p>}
         <button disabled={pending} className="mt-4 rounded-lg bg-[#18352d] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#23483d] active:scale-[0.99] disabled:opacity-60">
-          {pending ? "Gerando..." : document ? "Atualizar contrato" : "Gerar contrato"}
+          {pending ? "Gerando..." : document ? "Gerar nova versão" : "Gerar rascunho"}
         </button>
       </form>
     </details>
   );
+}
+
+function contractDocumentVersionStatusLabel(status: string) {
+  return ({ rascunho: "Rascunho", revisado: "Revisado", emitido: "Emitido", enviado: "Enviado", assinado: "Assinado", cancelado: "Cancelado" } as Record<string, string>)[status] ?? status;
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
 }
 
 export function BillingModelForm({ billing, eventId }: { billing: BillingModelForForm; eventId: string }) {
@@ -704,7 +822,7 @@ function ChecklistMoveButton({
       <button
         type="submit"
         disabled={disabled}
-        title={direction === "up" ? "Subir tarefa" : "Descer tarefa"}
+        title={direction === "up" ? "Subir pendência" : "Descer pendência"}
         className="grid h-8 w-8 place-items-center rounded-full border border-[#dbe3dc] bg-white text-sm font-semibold text-[#18352d] transition hover:bg-[#f6fbf7] disabled:cursor-not-allowed disabled:opacity-35"
       >
         {direction === "up" ? "↑" : "↓"}
@@ -752,7 +870,7 @@ function ChecklistFields({
       </div>
       <div>
         <label htmlFor={item ? `notes-${item.id}` : "new-notes"}>Observações internas</label>
-        <textarea id={item ? `notes-${item.id}` : "new-notes"} name="notes" rows={3} defaultValue={values?.notes ?? item?.notes ?? ""} placeholder="Detalhes úteis para a execução da tarefa." />
+        <textarea id={item ? `notes-${item.id}` : "new-notes"} name="notes" rows={3} defaultValue={values?.notes ?? item?.notes ?? ""} placeholder="Detalhes úteis para a execução da pendência." />
         {fieldErrors.notes?.[0] && <p className="mt-1 text-sm text-red-700">{fieldErrors.notes[0]}</p>}
       </div>
     </div>
@@ -1001,6 +1119,22 @@ function normalizePaymentMethod(value: string | null | undefined) {
     outro: "outro",
   };
   return normalized ? aliases[normalized] ?? value ?? "" : "";
+}
+
+function formatCpfCnpj(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 14);
+  if (digits.length <= 11) {
+    return digits
+      .replace(/^(\d{3})(\d)/, "$1.$2")
+      .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+      .replace(/^(\d{3})\.(\d{3})\.(\d{3})(\d)/, "$1.$2.$3-$4");
+  }
+
+  return digits
+    .replace(/^(\d{2})(\d)/, "$1.$2")
+    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/^(\d{2})\.(\d{3})\.(\d{3})(\d)/, "$1.$2.$3/$4")
+    .replace(/^(\d{2})\.(\d{3})\.(\d{3})\/(\d{4})(\d)/, "$1.$2.$3/$4-$5");
 }
 
 function isPaymentLate(payment: PaymentForForm) {

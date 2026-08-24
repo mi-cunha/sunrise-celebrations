@@ -39,6 +39,10 @@ type PackageItem = {
   description: string | null;
   show_in_proposal: boolean;
   show_in_operational_brief: boolean;
+  is_choice: boolean;
+  choice_group: string | null;
+  choice_min: number | null;
+  choice_max: number | null;
 };
 
 export function EventPackageForm({ eventTypes }: { eventTypes: EventTypeOption[] }) {
@@ -227,7 +231,7 @@ function PackageItemsList({ items, packageId }: { items: PackageItem[]; packageI
   if (!items.length) return <p className="rounded-lg bg-white p-3 text-sm text-slate-600">Nenhum item incluso neste pacote.</p>;
 
   return (
-    <ul className="space-y-3">
+    <ul className="space-y-2">
       {items.map((item) => (
         <PackageItemAccordion key={item.id} item={item} packageId={packageId} />
       ))}
@@ -244,12 +248,12 @@ function PackageItemAccordion({ item, packageId }: { item: PackageItem; packageI
   return (
     <li>
       <details className="rounded-lg border border-[#edf1ee] bg-white">
-        <summary className="cursor-pointer list-none p-4 transition hover:bg-[#f6f0e5]">
-          <div className="grid gap-2 md:grid-cols-[120px_1fr_180px]">
-            <span className="text-sm font-semibold text-[#356451]">{categoryLabel(item.category)}</span>
+        <summary className="cursor-pointer list-none px-3 py-2 transition hover:bg-[#f6f0e5]">
+          <div className="grid gap-2 md:grid-cols-[100px_1fr_150px] md:items-start">
+            <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[#356451]">{categoryLabel(item.category)}</span>
             <div>
-              <p className="font-medium">{item.name}</p>
-              {item.description && <p className="mt-1 text-sm text-slate-600">{item.description}</p>}
+              <p className="text-sm font-medium">{item.name}</p>
+              {item.description && <p className="mt-0.5 line-clamp-1 text-xs text-slate-600">{item.description}</p>}
             </div>
             <p className="text-xs text-slate-500">
               {item.show_in_proposal ? "Proposta" : ""}
@@ -258,7 +262,7 @@ function PackageItemAccordion({ item, packageId }: { item: PackageItem; packageI
             </p>
           </div>
         </summary>
-        <div className="border-t border-[#edf1ee] p-4">
+        <div className="border-t border-[#edf1ee] p-3">
           <form action={updateAction}>
             <input type="hidden" name="id" value={item.id} />
             <input type="hidden" name="packageId" value={packageId} />

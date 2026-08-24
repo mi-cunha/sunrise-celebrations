@@ -1,64 +1,50 @@
-# Próximo passo — transição para Fase 2
+# Próximo passo a passo — Fase 3: operação do evento aprovado
 
-## Checklist final da Fase 1
+## Resultado esperado
 
-1. Aplicar todas as migrations:
-   - `supabase/migrations/202608110001_initial_sunrise.sql`
-   - `supabase/migrations/202608120001_lead_option_catalog.sql`
-   - `supabase/migrations/202608120002_conversation_triage.sql`
-   - `supabase/migrations/202608120003_atendimento_lead_updates.sql`
-   - `supabase/migrations/202608120004_templates_users_transfer.sql`
-   - `supabase/migrations/202608130001_quotes.sql`
-   - `supabase/migrations/202608130002_quote_item_updates.sql`
-   - `supabase/migrations/202608130003_proposal_branding_options.sql`
-   - `supabase/migrations/202608130004_logo_upload_quote_item_catalog.sql`
-   - `supabase/migrations/202608130005_admin_catalog_edit_remove.sql`
-   - `supabase/migrations/202608130006_quote_decisions_edit_unlock.sql`
-2. Reiniciar o servidor local após alterações de `.env.local` ou migrations.
-3. Validar `/atendimentos`:
-   - criar conversa simulada;
-   - usar templates de resposta;
-   - responder como humano;
-   - transferir atendimento;
-   - encerrar atendimento.
-4. Validar `/admin/usuarios`:
-   - editar nome de usuário;
-   - alterar permissões;
-   - ativar/desativar usuário.
-5. Validar recuperação de senha:
-   - clicar em “Esqueci minha senha”;
-   - receber e-mail do Supabase;
-   - abrir link;
-   - redefinir senha;
-   - entrar com a nova senha.
+Evoluir gradualmente o evento aprovado para uma operação controlada, sem mudar ou regredir os fluxos existentes de contatos, atendimento, orçamentos e eventos. A sequência adiciona contratos, financeiro/custos e hospitalidade somente após cada recorte ser validado.
 
-## Fase 2 — orçamentos
+## 1. Descobrir e fixar o recorte
 
-Objetivo: transformar um lead qualificado em orçamento estruturado.
+1. Revisar o modelo atual de evento, orçamento aprovado, pagamentos, permissões e RLS.
+2. Confirmar quais entidades e telas da Fase 3 já existem antes de cada migration.
+3. Separar os dados comerciais, financeiros, operacionais e de hospitalidade.
+4. Definir critérios de aceite e cenários de autorização antes de implementar cada subfase.
 
-Primeira fatia:
+## 2. Fase 3a — Contratos e termos
 
-1. Criar modelo de dados para orçamento.
-2. Criar orçamento a partir de um lead/evento potencial.
-3. Adicionar itens com quantidade e valor unitário.
-4. Calcular total.
-5. Exibir orçamento dentro da página do lead e do atendimento.
-6. Registrar mudanças no histórico.
+1. Modelar tipos, status, versão e dados editáveis de documento vinculados ao evento aprovado.
+2. Criar regras configuráveis para sugerir contrato completo, termo simplificado ou aceite de proposta.
+3. Considerar tipo/complexidade do evento, valor, convidados, sinal, parcelamento, decoração, fornecedores, exclusividade, horário e cerimônia.
+4. Evoluir os rascunhos versionados, revisão humana, histórico e emissão já implementados para templates configuráveis e sincronização dos estados enviado/assinado/cancelado.
+5. Não criar cláusulas jurídicas definitivas sem validação humana ou jurídica.
 
-Fatia atual:
+## 3. Fase 3b — Financeiro e custos
 
-1. Editar itens de um orçamento existente.
-2. Remover itens.
-3. Recalcular o total automaticamente após edição/remoção.
-4. Registrar edição/remoção no histórico.
-5. Criar proposta visual do orçamento para impressão/salvar em PDF.
-6. Permitir logo configurável e opções padronizadas/manual para proposta.
-7. Permitir logo por arquivo local e catálogo de itens/serviços do orçamento.
-8. Permitir edição/remoção dos catálogos administrativos em accordions.
-9. Registrar aprovação/recusa com motivo e proteger edição pós-aprovação com liberação admin.
+1. Modelar valores cobrados, sinal, parcelas, vencimentos, recebimentos e status de pagamento.
+2. Registrar custos de alimentos/bebidas, equipe, decoração, fornecedores, impressão, cortesias e outros.
+3. Calcular receita, custo total estimado, margem bruta, comissão e lucro estimado.
+4. Garantir que toda cortesia e material impresso tenham custo estimado registrado.
+5. Restringir custos, margem e indicadores a `financeiro`, `gerencia` e `admin_owner`, no servidor e em RLS.
 
-Próximas fatias prováveis:
+## 4. Fase 3c — Hospitalidade e materiais simples
 
-- geração de PDF interno automatizado;
-- regras de aprovação/recusa;
-- vínculo com contratação.
+1. Modelar itens de cortesia, recepção, mesa, pós-evento e material impresso.
+2. Registrar nome, tipo, descrição, custo, momento de uso, visibilidade, responsável e status.
+3. Permitir múltiplas cortesias, itens personalizados e indicação de comunicação ao cliente ou uso interno.
+4. Registrar mini cardápio, menu de drinks, cartão de boas-vindas, plaquinha de reservado, roteiro e cartão de agradecimento.
+5. Integrar custos ao financeiro e itens ao checklist; gerar conteúdo-base, sem implementar design avançado.
+
+## 5. Verificar e consolidar cada subfase
+
+1. Testar autorizações positivas e negativas, cálculos, vínculos com o evento e preservação de funcionalidades existentes.
+2. Executar `npm run lint`, `npm run typecheck`, `npm test` e `npm run build`.
+3. Revisar migrations, RLS, logs, variáveis de ambiente e diff para segredos ou dados reais.
+4. Atualizar `docs/progress.md`, `docs/architecture.md` e decisões documentadas ao concluir cada recorte.
+
+## Fora do escopo deste passo
+
+- Alterar a usabilidade ou substituir fluxos já entregues.
+- Criar redação jurídica definitiva automaticamente.
+- Gerar design avançado de materiais impressos.
+- Antecipar a integração oficial com WhatsApp.

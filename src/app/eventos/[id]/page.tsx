@@ -4,16 +4,17 @@ import { AppShell } from "@/components/app-shell";
 import { FlowProgress, NextStepCard } from "@/components/flow-guidance";
 import { SetupNotice } from "@/components/setup-notice";
 import { contractedEventBillingModelLabel, contractedEventContractStatusLabel, contractedEventPaymentStatusLabel, contractedEventStatusLabel, contractedEventVendorStatusLabel } from "@/lib/domain/contracted-event";
-import { formatCurrencyFromCents, quoteStatusLabel } from "@/lib/domain/quote";
+import { formatCurrencyFromCents, quoteEventAreaLabel, quoteStatusLabel } from "@/lib/domain/quote";
 import { requireUser } from "@/lib/auth";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
-import { BillingModelForm, ChecklistItemCard, ChecklistItemForm, ContractedEventStatusForm, ContractDocumentForm, ContractForm, OperationalBriefForm, PaymentCard, PaymentForm, PaymentPlanForm, TimelineEntryCard, TimelineEntryForm, VendorCard, VendorForm } from "./event-forms";
+import { BillingModelForm, ChecklistItemCard, ChecklistItemForm, ContractedEventNotesForm, ContractedEventStatusForm, ContractDocumentForm, ContractForm, OperationalBriefForm, PaymentCard, PaymentForm, PaymentPlanForm, TimelineEntryCard, TimelineEntryForm, VendorCard, VendorForm } from "./event-forms";
 
 type ContractedEventDetail = {
   id: string;
   title: string;
   status: string;
   event_type: string | null;
+  event_area: string | null;
   event_date: string | null;
   guest_count: number | null;
   billing_model: string;
@@ -30,6 +31,7 @@ type ContractedEventDetail = {
   contracted_event_vendors: Vendor[];
   contracted_event_history: EventHistory[];
   contracted_event_documents: EventDocument[];
+  contracted_event_contract_document_versions: ContractDocumentVersion[];
 };
 
 type ChecklistItem = {
@@ -99,6 +101,18 @@ type EventDocument = {
   updated_at: string;
 };
 
+type ContractDocumentVersion = {
+  id: string;
+  version: number;
+  document_kind: string;
+  status: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  reviewed_at: string | null;
+  issued_at: string | null;
+};
+
 type Assignee = {
   id: string;
   display_name: string | null;
@@ -122,7 +136,7 @@ export default async function EventDetailPage({
 
   const { data: event, error } = await supabase
     .from("contracted_events")
-    .select("id,title,status,event_type,event_date,guest_count,billing_model,billing_notes,notes,created_at,updated_at,leads(id,name,company,phone),quotes(id,title,status,total_amount_cents),contracted_event_contracts(id,status,signed_at,notes),contracted_event_payments(id,kind,status,amount_cents,due_date,paid_at,payment_method,notes),contracted_event_checklist(id,title,is_done,sort_order,completed_at,assigned_to,due_date,notes),contracted_event_timeline(id,title,start_time,end_time,location,assigned_to,notes,sort_order),contracted_event_vendors(id,category,name,contact_name,phone,email,status,notes),contracted_event_history(id,action,metadata,created_at,profiles(display_name)),contracted_event_documents(id,document_type,title,content,updated_at)")
+    .select("id,title,status,event_type,event_area,event_date,guest_count,billing_model,billing_notes,notes,created_at,updated_at,leads(id,name,company,phone),quotes(id,title,status,total_amount_cents),contracted_event_contracts(id,status,signed_at,notes),contracted_event_payments(id,kind,status,amount_cents,due_date,paid_at,payment_method,notes),contracted_event_checklist(id,title,is_done,sort_order,completed_at,assigned_to,due_date,notes),contracted_event_timeline(id,title,start_time,end_time,location,assigned_to,notes,sort_order),contracted_event_vendors(id,category,name,contact_name,phone,email,status,notes),contracted_event_history(id,action,metadata,created_at,profiles(display_name)),contracted_event_documents(id,document_type,title,content,updated_at),contracted_event_contract_document_versions(id,version,document_kind,status,title,created_at,updated_at,reviewed_at,issued_at)")
     .eq("id", id)
     .maybeSingle();
   const { data: profiles } = await supabase.from("profiles").select("id,display_name").eq("is_active", true).order("display_name");
@@ -153,6 +167,8 @@ export default async function EventDetailPage({
   const assigneeNames = new Map(assignees.map((profile) => [profile.id, profile.display_name ?? "Usuário"]));
   const operationalBrief = detail.contracted_event_documents?.find((document) => document.document_type === "ficha_operacional");
   const contractDocument = detail.contracted_event_documents?.find((document) => document.document_type === "contrato");
+  const contractVersions = [...(detail.contracted_event_contract_document_versions ?? [])].sort((left, right) => right.version - left.version);
+  const latestContractVersion = contractVersions[0];
   const completedItems = checklist.filter((item) => item.is_done).length;
   const hasPendingChecklist = checklist.some((item) => !item.is_done);
   const hasVendors = vendors.length > 0;
@@ -163,7 +179,7 @@ export default async function EventDetailPage({
     <AppShell title={detail.title}>
       <div className="mt-2 flex flex-wrap items-center gap-3">
         <Link href="/eventos" className="text-sm font-semibold text-[#356451] underline">
-          ? Voltar aos eventos
+          Voltar aos eventos
         </Link>
         {detail.leads && (
           <Link href={`/leads/${detail.leads.id}`} className="text-sm font-semibold text-[#356451] underline">
@@ -196,6 +212,7 @@ export default async function EventDetailPage({
                   <Info label="Cliente" value={detail.leads?.name ?? "Não informado"} />
                   <Info label="Telefone" value={detail.leads?.phone ?? "Não informado"} />
                   <Info label="Tipo de evento" value={detail.event_type ?? "Não informado"} />
+                  <Info label="Área" value={quoteEventAreaLabel(detail.event_area)} />
                   <Info label="Data" value={detail.event_date ? formatDate(detail.event_date) : "Não definida"} />
                   <Info label="Convidados" value={detail.guest_count ? String(detail.guest_count) : "Não informado"} />
                   <Info label="Status" value={contractedEventStatusLabel(detail.status)} />
@@ -217,8 +234,15 @@ export default async function EventDetailPage({
                 {detail.billing_notes && <p className="mt-2 whitespace-pre-wrap">{detail.billing_notes}</p>}
               </div>
             )}
-            {detail.notes && <p className="mt-5 whitespace-pre-wrap border-t border-slate-100 pt-4 text-slate-700">{detail.notes}</p>}
           </section>
+
+          {canManageEvents && <ContractedEventNotesForm eventId={detail.id} notes={detail.notes} />}
+          {!canManageEvents && detail.notes && (
+            <section className="rounded-lg border border-[#dbe3dc] bg-white p-4">
+              <h2 className="font-semibold">Observação operacional</h2>
+              <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">{detail.notes}</p>
+            </section>
+          )}
 
           {canManageFinancials && (
             <section className="rounded-lg border border-[#dbe3dc] bg-white p-4">
@@ -236,8 +260,17 @@ export default async function EventDetailPage({
 
               <div className="mt-5 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
                 <div className="space-y-5">
-                  <ContractForm contract={contract ?? undefined} eventId={detail.id} />
-                  {canGenerateContractDocument && <ContractDocumentForm document={contractDocument ?? undefined} eventId={detail.id} />}
+                  {detail.quotes?.status === "aprovado" ? (
+                    <>
+                      <ContractForm contract={contract ?? undefined} eventId={detail.id} />
+                      {canGenerateContractDocument && <ContractDocumentForm document={latestContractVersion ?? undefined} eventId={detail.id} />}
+                    </>
+                  ) : (
+                    <div className="rounded-lg border border-[#dbe3dc] bg-[#f8fafc] p-4">
+                      <h3 className="font-semibold">Contrato indisponível</h3>
+                      <p className="mt-1 text-sm text-slate-600">A área de contrato será liberada após a aprovação do orçamento e a conclusão das escolhas obrigatórias do pacote.</p>
+                    </div>
+                  )}
                   <BillingModelForm billing={{ billing_model: detail.billing_model, billing_notes: detail.billing_notes }} eventId={detail.id} />
                 </div>
                 <div className="rounded-lg border border-[#dbe3dc] bg-white p-4">
@@ -356,6 +389,18 @@ export default async function EventDetailPage({
                     action="Abrir contrato"
                   />
                 )}
+                {contractVersions.length > 0 && (
+                  <div className="rounded-lg border border-[#edf1ee] bg-white p-4">
+                    <p className="text-sm font-semibold">Histórico de versões</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {contractVersions.map((version) => (
+                        <Link key={version.id} href={`/eventos/${detail.id}/contrato?versao=${version.version}`} target="_blank" className="rounded-lg border border-[#dbe3dc] px-3 py-2 text-xs font-semibold text-[#0f5f8f] hover:bg-[#eef6fb]">
+                          Versão {version.version} · {contractDocumentVersionStatusLabel(version.status)}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <p className="mt-4 rounded-lg bg-[#fbf8f1] p-3 text-sm text-slate-600">Nenhum documento gerado ainda.</p>
@@ -403,6 +448,10 @@ function DocumentCard({ action, href, title, updatedAt }: { action: string; href
       </Link>
     </div>
   );
+}
+
+function contractDocumentVersionStatusLabel(status: string) {
+  return ({ rascunho: "Rascunho", revisado: "Revisado", emitido: "Emitido", enviado: "Enviado", assinado: "Assinado", cancelado: "Cancelado" } as Record<string, string>)[status] ?? status;
 }
 
 function OperationalBriefModal({ eventId }: { eventId: string }) {
@@ -560,7 +609,7 @@ function historyText(entry: EventHistory) {
   if (entry.action === "Status do evento alterado") {
     const from = typeof entry.metadata.from === "string" ? contractedEventStatusLabel(entry.metadata.from) : "status anterior";
     const to = typeof entry.metadata.to === "string" ? contractedEventStatusLabel(entry.metadata.to) : "novo status";
-    return `Status: ${from} ? ${to}`;
+    return `Status: ${from} -> ${to}`;
   }
   if (entry.action === "Checklist concluído" || entry.action === "Checklist concluído" || entry.action === "Checklist reaberto") {
     const title = typeof entry.metadata.title === "string" ? `: ${entry.metadata.title}` : "";

@@ -8,4 +8,8 @@ O banco é a fronteira de segurança: RLS exige usuário ativo para leitura oper
 
 As entidades implementadas até aqui são `profiles`, `user_permissions`, `leads`, `potential_events`, `lead_history`, `option_catalog`, `conversations` e `conversation_messages`. As conversas começam em `ia_triagem`, podem passar para `aguardando_humano`, e quando uma pessoa assume vão para `humano_assumiu` com `ai_paused = true`. Mensagens identificam autor como cliente, IA, humano ou sistema.
 
-Antes de integrar o WhatsApp oficial, a aplicação valida o fluxo com `whatsapp_simulado` e Server Actions locais. A integração oficial entra posteriormente como adaptador seguro para webhooks/envio/templates, sem acoplar a UI a serviços externos. Ainda não há orçamento, contratos, pagamentos, API real do WhatsApp ou isolamento multiempresa. Todas as chaves usam UUID para manter uma futura chave de organização possível sem redesenhar identificadores.
+Antes de integrar o WhatsApp oficial, a aplicação valida o fluxo com `whatsapp_simulado` e Server Actions locais. A integração oficial entra posteriormente como adaptador seguro para webhooks/envio/templates, sem acoplar a UI a serviços externos.
+
+O próximo desenho da Fase 3 estende o evento aprovado, sem substituir as entidades ou fluxos atuais: contratos/termos versionados e revisáveis; financeiro separado entre cobrança, recebimento, custo, cortesia e margem; e hospitalidade com itens planejados e custos rastreáveis. O acesso financeiro permanece restrito no servidor e em RLS a `financeiro`, `gerencia` e `admin_owner`. Modelagem e implementação desses módulos ainda são pendentes; requisitos, limites e critérios de aceite constam em `docs/addenda/contratos-financeiro-hospitalidade.md`.
+
+Ainda não há API real do WhatsApp ou isolamento multiempresa. Todas as chaves usam UUID para manter uma futura chave de organização possível sem redesenhar identificadores.

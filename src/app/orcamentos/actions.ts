@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { quoteEditLockSchema, quoteItemDeleteSchema, quoteItemSchema, quoteItemUpdateSchema, quotePackageDeleteSchema, quotePackageSchema, quoteStatusSchema } from "@/lib/domain/quote";
+import { quoteEditLockSchema, quoteEventAreaSchema, quoteItemDeleteSchema, quoteItemSchema, quoteItemUpdateSchema, quotePackageChoicesSchema, quotePackageDeleteSchema, quotePackageSchema, quoteStatusSchema } from "@/lib/domain/quote";
 import { requireUser } from "@/lib/auth";
 
 export type QuoteFormState = {
@@ -36,6 +36,24 @@ const removeQuoteProposalOptionSchema = z.object({
   quoteId: z.string().uuid(),
 });
 
+export async function updateQuoteEventArea(_: QuoteFormState, formData: FormData): Promise<QuoteFormState> {
+  const raw = {
+    quoteId: String(formData.get("quoteId") ?? ""),
+    eventArea: String(formData.get("eventArea") ?? ""),
+  };
+  const parsed = quoteEventAreaSchema.safeParse(raw);
+  if (!parsed.success) return { error: "Selecione a área do evento.", fieldErrors: parsed.error.flatten().fieldErrors, values: raw, version: Date.now() };
+
+  const { supabase } = await requireQuoteManager();
+  const { error } = await supabase.from("quotes").update({ event_area: parsed.data.eventArea }).eq("id", parsed.data.quoteId);
+  if (error) return { error: error.message, values: raw, version: Date.now() };
+
+  revalidatePath(`/orcamentos/${parsed.data.quoteId}`);
+  revalidatePath(`/orcamentos/${parsed.data.quoteId}/proposta`);
+  revalidatePath("/eventos");
+  return { success: "Área do evento atualizada.", version: Date.now() };
+}
+
 export async function setQuotePackage(_: QuoteFormState, formData: FormData): Promise<QuoteFormState> {
   const raw = {
     quoteId: String(formData.get("quoteId") ?? ""),
@@ -54,6 +72,11 @@ export async function setQuotePackage(_: QuoteFormState, formData: FormData): Pr
     p_notes: parsed.data.notes ?? "",
   });
   if (error) return { error: error.message, values: raw, version: Date.now() };
+
+  await supabase.rpc("set_quote_package_item_choices", {
+    p_quote_id: parsed.data.quoteId,
+    p_package_item_ids: [],
+  });
 
   revalidatePath(`/orcamentos/${parsed.data.quoteId}`);
   revalidatePath(`/orcamentos/${parsed.data.quoteId}/proposta`);
@@ -75,6 +98,26 @@ export async function removeQuotePackage(_: QuoteFormState, formData: FormData):
   revalidatePath(`/orcamentos/${parsed.data.quoteId}`);
   revalidatePath(`/orcamentos/${parsed.data.quoteId}/proposta`);
   return { success: "Pacote removido.", version: Date.now() };
+}
+
+export async function setQuotePackageChoices(_: QuoteFormState, formData: FormData): Promise<QuoteFormState> {
+  const raw = {
+    quoteId: String(formData.get("quoteId") ?? ""),
+    packageItemIds: formData.getAll("packageItemIds").map(String),
+  };
+  const parsed = quotePackageChoicesSchema.safeParse(raw);
+  if (!parsed.success) return { error: "Revise as escolhas do pacote.", version: Date.now() };
+
+  const { supabase } = await requireQuoteManager();
+  const { error } = await supabase.rpc("set_quote_package_item_choices", {
+    p_quote_id: parsed.data.quoteId,
+    p_package_item_ids: parsed.data.packageItemIds,
+  });
+  if (error) return { error: error.message, version: Date.now() };
+
+  revalidatePath(`/orcamentos/${parsed.data.quoteId}`);
+  revalidatePath(`/orcamentos/${parsed.data.quoteId}/proposta`);
+  return { success: "Escolhas do pacote salvas.", version: Date.now() };
 }
 
 export async function createQuoteFromLead(formData: FormData) {
@@ -172,6 +215,17 @@ export async function updateQuoteStatus(_: QuoteFormState, formData: FormData): 
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Selecione um status válido.", values: { reason: String(formData.get("reason") ?? "") }, version: Date.now() };
 
   const { supabase } = await requireQuoteManager();
+  if (parsed.data.status === "aprovado") {
+    const { data: quote, error: quoteError } = await supabase
+      .from("quotes")
+      .select("quote_packages(id,unit_price_cents,event_package_catalog(event_package_items(id,category,show_in_proposal,is_choice,choice_group,choice_min)),quote_package_item_choices(package_item_id))")
+      .eq("id", parsed.data.quoteId)
+      .maybeSingle();
+    if (quoteError) return { error: quoteError.message, values: { reason: parsed.data.reason ?? "" }, version: Date.now() };
+
+    const approvalIssue = getQuoteApprovalIssue(quote as unknown as QuoteApprovalData | null);
+    if (approvalIssue) return { error: approvalIssue, values: { reason: parsed.data.reason ?? "" }, version: Date.now() };
+  }
   const { error } = await supabase.rpc("update_quote_status", {
     p_quote_id: parsed.data.quoteId,
     p_status: parsed.data.status,
@@ -183,6 +237,58 @@ export async function updateQuoteStatus(_: QuoteFormState, formData: FormData): 
   revalidatePath("/painel");
   revalidatePath("/atendimentos");
   return { success: "Status atualizado.", version: Date.now() };
+}
+
+type QuoteApprovalPackageItem = {
+  id: string;
+  category: string;
+  show_in_proposal: boolean;
+  is_choice: boolean;
+  choice_group: string | null;
+  choice_min: number | null;
+};
+
+type QuoteApprovalPackage = {
+  unit_price_cents: number | null;
+  event_package_catalog: { event_package_items: QuoteApprovalPackageItem[] | QuoteApprovalPackageItem | null } | null;
+  quote_package_item_choices: { package_item_id: string }[] | { package_item_id: string } | null;
+};
+
+type QuoteApprovalData = {
+  quote_packages: QuoteApprovalPackage[] | QuoteApprovalPackage | null;
+};
+
+function getQuoteApprovalIssue(quote: QuoteApprovalData | null) {
+  if (!quote) return "Orçamento não encontrado.";
+  const packages = toArray(quote.quote_packages);
+  if (!packages.length) return "Selecione um pacote antes de aprovar o orçamento.";
+  if (!packages.some((packageItem) => (packageItem.unit_price_cents ?? 0) > 0)) {
+    return "Informe o valor por pessoa do pacote antes de aprovar o orçamento.";
+  }
+
+  for (const packageItem of packages) {
+    const selectedIds = new Set(toArray(packageItem.quote_package_item_choices).map((choice) => choice.package_item_id));
+    const choiceItems = toArray(packageItem.event_package_catalog?.event_package_items).filter((item) => item.show_in_proposal && item.is_choice);
+    const groups = choiceItems.reduce((result, item) => {
+      const name = item.choice_group?.trim() || item.category;
+      const current = result.get(name) ?? { minimum: item.choice_min ?? 0, selected: 0 };
+      current.minimum = Math.max(current.minimum, item.choice_min ?? 0);
+      if (selectedIds.has(item.id)) current.selected += 1;
+      result.set(name, current);
+      return result;
+    }, new Map<string, { minimum: number; selected: number }>());
+    const pendingGroup = Array.from(groups.entries()).find(([, group]) => group.selected < group.minimum);
+    if (pendingGroup) {
+      const [name, group] = pendingGroup;
+      return `Complete as escolhas obrigatórias de “${name}” antes de aprovar: ${group.selected} de ${group.minimum} selecionadas.`;
+    }
+  }
+  return null;
+}
+
+function toArray<T>(value: T[] | T | null | undefined): T[] {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
 }
 
 export async function setApprovedQuoteEditLock(_: QuoteFormState, formData: FormData): Promise<QuoteFormState> {

@@ -35,6 +35,11 @@ export const contractedEventStatusSchema = z.object({
   status: z.enum(contractedEventStatuses),
 });
 
+export const contractedEventNotesSchema = z.object({
+  eventId: z.string().uuid(),
+  notes: z.string().trim().max(4000, "Use até 4000 caracteres.").optional().transform((value) => value || undefined),
+});
+
 export const contractedEventChecklistSchema = z.object({
   itemId: z.string().uuid(),
   isDone: z.boolean(),
@@ -50,9 +55,17 @@ const optionalUuid = z.preprocess((value) => (value === "" ? undefined : value),
 
 const optionalNotes = z.string().trim().max(1200, "Use até 1200 caracteres.").optional().transform((value) => value || undefined);
 
+const optionalCpfCnpj = z
+  .string()
+  .trim()
+  .max(80, "Use até 80 caracteres.")
+  .optional()
+  .transform((value) => value || undefined)
+  .refine((value) => !value || isValidCpfCnpj(value), "Informe um CPF ou CNPJ válido.");
+
 export const contractedEventChecklistItemSchema = z.object({
   eventId: z.string().uuid(),
-  title: z.string().trim().min(2, "Informe a tarefa.").max(160, "Use até 160 caracteres."),
+  title: z.string().trim().min(2, "Informe a pendência.").max(160, "Use até 160 caracteres."),
   assignedTo: optionalUuid,
   dueDate: optionalDate,
   notes: optionalNotes,
@@ -157,6 +170,12 @@ export type ContractedEventContractDocumentKind = (typeof contractedEventContrac
 export const contractedEventContractDocumentSchema = z.object({
   eventId: z.string().uuid(),
   documentKind: z.enum(contractedEventContractDocumentKinds),
+  contractingPartyName: z.string().trim().max(180, "Use até 180 caracteres.").optional().transform((value) => value || undefined),
+  contractingPartyDocument: optionalCpfCnpj,
+  contractingPartyAddress: z.string().trim().max(240, "Use até 240 caracteres.").optional().transform((value) => value || undefined),
+  contractingPartyRepresentative: z.string().trim().max(180, "Use até 180 caracteres.").optional().transform((value) => value || undefined),
+  eventSchedule: z.string().trim().max(120, "Use até 120 caracteres.").optional().transform((value) => value || undefined),
+  specialClauses: z.string().trim().max(1600, "Use até 1600 caracteres.").optional().transform((value) => value || undefined),
   notes: optionalNotes,
 });
 
@@ -292,10 +311,10 @@ export function contractedEventContractStatusLabel(status: string) {
 
 export function contractedEventContractDocumentKindLabel(kind: string) {
   const labels: Record<string, string> = {
-    auto: "Sugestão automática",
-    contrato_completo: "Contrato completo",
-    termo_simplificado: "Termo simplificado",
-    aceite_proposta: "Aceite de proposta",
+    auto: "Automático conforme o porte do evento",
+    contrato_completo: "Contrato completo de prestação de serviços",
+    termo_simplificado: "Contrato simplificado de prestação de serviços",
+    aceite_proposta: "Termo de ciência e consentimento para evento",
   };
   return labels[kind] ?? kind;
 }
@@ -353,4 +372,39 @@ export function contractedEventPaymentPlanIntervalLabel(interval: string) {
     personalizado: "Personalizado",
   };
   return labels[interval] ?? interval;
+}
+
+function isValidCpfCnpj(value: string) {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length === 11) return isValidCpf(digits);
+  if (digits.length === 14) return isValidCnpj(digits);
+  return false;
+}
+
+function isValidCpf(cpf: string) {
+  if (/^(\d)\1+$/.test(cpf)) return false;
+  const firstDigit = calculateCheckDigit(cpf.slice(0, 9), 10);
+  const secondDigit = calculateCheckDigit(cpf.slice(0, 10), 11);
+  return cpf === `${cpf.slice(0, 9)}${firstDigit}${secondDigit}`;
+}
+
+function isValidCnpj(cnpj: string) {
+  if (/^(\d)\1+$/.test(cnpj)) return false;
+  const firstWeights = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  const secondWeights = [6, ...firstWeights];
+  const firstDigit = calculateWeightedCheckDigit(cnpj.slice(0, 12), firstWeights);
+  const secondDigit = calculateWeightedCheckDigit(cnpj.slice(0, 13), secondWeights);
+  return cnpj === `${cnpj.slice(0, 12)}${firstDigit}${secondDigit}`;
+}
+
+function calculateCheckDigit(base: string, initialWeight: number) {
+  const sum = base.split("").reduce((total, digit, index) => total + Number(digit) * (initialWeight - index), 0);
+  const remainder = (sum * 10) % 11;
+  return remainder === 10 ? 0 : remainder;
+}
+
+function calculateWeightedCheckDigit(base: string, weights: number[]) {
+  const sum = base.split("").reduce((total, digit, index) => total + Number(digit) * weights[index], 0);
+  const remainder = sum % 11;
+  return remainder < 2 ? 0 : 11 - remainder;
 }

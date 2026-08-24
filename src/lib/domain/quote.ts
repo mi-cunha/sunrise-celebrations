@@ -1,6 +1,22 @@
 import { z } from "zod";
 
 export const quoteStatuses = ["rascunho", "em_elaboracao", "enviado", "aprovado", "recusado", "expirado"] as const;
+export const quoteEventAreas = ["lado_esquerdo", "lado_direito", "praia", "casa_completa"] as const;
+
+export const quoteEventAreaSchema = z.object({
+  quoteId: z.string().uuid(),
+  eventArea: z.enum(quoteEventAreas),
+});
+
+export function quoteEventAreaLabel(area: string | null | undefined) {
+  const labels: Record<string, string> = {
+    lado_esquerdo: "Lado esquerdo",
+    lado_direito: "Lado direito",
+    praia: "Praia",
+    casa_completa: "Casa completa",
+  };
+  return area ? labels[area] ?? area : "A definir";
+}
 export type QuoteStatus = (typeof quoteStatuses)[number];
 
 export const quoteItemSchema = z.object({
@@ -60,6 +76,11 @@ export const quotePackageSchema = z.object({
 
 export const quotePackageDeleteSchema = z.object({
   quoteId: z.string().uuid(),
+});
+
+export const quotePackageChoicesSchema = z.object({
+  quoteId: z.string().uuid(),
+  packageItemIds: z.array(z.string().uuid()),
 });
 
 export function quoteStatusLabel(status: string) {
