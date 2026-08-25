@@ -14,6 +14,9 @@ import {
   contractedEventContractDocumentKindLabel,
   contractedEventContractDocumentSchema,
   contractedEventContractSchema,
+  contractedEventCostDeleteSchema,
+  contractedEventCostSchema,
+  contractedEventCostUpdateSchema,
   contractedEventNotesSchema,
   contractedEventPaymentDeleteSchema,
   contractedEventPaymentKindLabel,
@@ -236,10 +239,8 @@ export async function generateContractedEventContractDocument(_: ContractedEvent
     contractingPartyAddress: String(formData.get("contractingPartyAddress") ?? ""),
     contractingPartyRepresentative: String(formData.get("contractingPartyRepresentative") ?? ""),
     eventSchedule: String(formData.get("eventSchedule") ?? ""),
-    specialClauses: String(formData.get("specialClauses") ?? ""),
-    notes: String(formData.get("notes") ?? ""),
   };
-  const parsed = contractedEventContractDocumentSchema.safeParse(raw);
+  const parsed = contractedEventContractDocumentSchema.safeParse({ ...raw, standardClauses: formData.getAll("standardClauses").map(String) });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revise os dados do contrato.", fieldErrors: parsed.error.flatten().fieldErrors, values: raw, version: Date.now() };
 
   const { supabase } = await requireContractDocumentManager();
@@ -301,6 +302,13 @@ export async function generateContractedEventContractDocument(_: ContractedEvent
 }
 
 const contractDocumentVersionActionSchema = z.object({ versionId: z.string().uuid() });
+const contractDocumentVersionStatusSchema = z.object({
+  versionId: z.string().uuid(),
+  status: z.enum(["enviado", "assinado", "cancelado"]),
+  signedAt: z.preprocess((value) => value == null || value === "" ? undefined : value, z.string().date().optional()),
+}).superRefine((value, context) => {
+  if (value.status === "assinado" && !value.signedAt) context.addIssue({ code: "custom", path: ["signedAt"], message: "Informe a data da assinatura." });
+});
 
 export async function reviewContractDocumentVersion(_: ContractedEventFormState, formData: FormData): Promise<ContractedEventFormState> {
   const parsed = contractDocumentVersionActionSchema.safeParse({ versionId: formData.get("versionId") });
@@ -322,6 +330,40 @@ export async function issueContractDocumentVersion(_: ContractedEventFormState, 
   revalidatePath(`/eventos/${eventId}`);
   revalidatePath(`/eventos/${eventId}/contrato`);
   return { success: "Versão final emitida e pronta para impressão.", version: Date.now() };
+}
+
+async function setContractDocumentVersionLifecycle(formData: FormData, status: "enviado" | "assinado" | "cancelado"): Promise<ContractedEventFormState> {
+  const parsed = contractDocumentVersionStatusSchema.safeParse({
+    versionId: formData.get("versionId"),
+    status,
+    signedAt: formData.get("signedAt"),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revise o status do contrato.", fieldErrors: parsed.error.flatten().fieldErrors, version: Date.now() };
+
+  const { supabase } = await requireContractDocumentManager();
+  const { data: eventId, error } = await supabase.rpc("set_contract_document_version_status", {
+    p_version_id: parsed.data.versionId,
+    p_status: parsed.data.status,
+    p_signed_at: parsed.data.signedAt ?? null,
+  });
+  if (error || !eventId) return { error: error?.message ?? "Não foi possível atualizar o contrato.", version: Date.now() };
+
+  revalidatePath("/contratos");
+  revalidatePath(`/eventos/${eventId}`);
+  revalidatePath(`/eventos/${eventId}/contrato`);
+  return { success: parsed.data.status === "assinado" ? "Assinatura registrada e contrato sincronizado." : "Status do contrato sincronizado.", version: Date.now() };
+}
+
+export async function markContractDocumentVersionSent(_: ContractedEventFormState, formData: FormData) {
+  return setContractDocumentVersionLifecycle(formData, "enviado");
+}
+
+export async function markContractDocumentVersionSigned(_: ContractedEventFormState, formData: FormData) {
+  return setContractDocumentVersionLifecycle(formData, "assinado");
+}
+
+export async function cancelContractDocumentVersion(_: ContractedEventFormState, formData: FormData) {
+  return setContractDocumentVersionLifecycle(formData, "cancelado");
 }
 
 export async function addContractedEventTimelineEntry(_: ContractedEventFormState, formData: FormData): Promise<ContractedEventFormState> {
@@ -670,6 +712,53 @@ export async function removeContractedEventPayment(_: ContractedEventFormState, 
   return { success: "Pagamento removido.", version: Date.now() };
 }
 
+export async function addContractedEventCost(_: ContractedEventFormState, formData: FormData): Promise<ContractedEventFormState> {
+  const raw = costRawValues(formData);
+  const parsed = contractedEventCostSchema.safeParse(raw);
+  if (!parsed.success) return { error: "Revise o custo.", fieldErrors: parsed.error.flatten().fieldErrors, values: raw, version: Date.now() };
+  const { supabase } = await requireFinancialManager();
+  const { error } = await supabase.rpc("add_contracted_event_cost", {
+    p_event_id: parsed.data.eventId, p_category: parsed.data.category, p_status: parsed.data.status,
+    p_description: parsed.data.description, p_estimated_amount_cents: parsed.data.estimatedAmount,
+    p_actual_amount_cents: parsed.data.actualAmount ?? null, p_due_date: parsed.data.dueDate ?? null, p_notes: parsed.data.notes ?? null,
+  });
+  if (error) return { error: error.message, values: raw, version: Date.now() };
+  revalidatePath(`/eventos/${parsed.data.eventId}`);
+  revalidatePath("/financeiro");
+  return { success: "Custo adicionado.", version: Date.now() };
+}
+
+export async function updateContractedEventCost(_: ContractedEventFormState, formData: FormData): Promise<ContractedEventFormState> {
+  const raw = { ...costRawValues(formData), costId: String(formData.get("costId") ?? "") };
+  const parsed = contractedEventCostUpdateSchema.safeParse(raw);
+  if (!parsed.success) return { error: "Revise o custo.", fieldErrors: parsed.error.flatten().fieldErrors, values: raw, version: Date.now() };
+  const { supabase } = await requireFinancialManager();
+  const { data: eventId, error } = await supabase.rpc("update_contracted_event_cost", {
+    p_cost_id: parsed.data.costId, p_category: parsed.data.category, p_status: parsed.data.status,
+    p_description: parsed.data.description, p_estimated_amount_cents: parsed.data.estimatedAmount,
+    p_actual_amount_cents: parsed.data.actualAmount ?? null, p_due_date: parsed.data.dueDate ?? null, p_notes: parsed.data.notes ?? null,
+  });
+  if (error) return { error: error.message, values: raw, version: Date.now() };
+  revalidatePath(`/eventos/${eventId ?? parsed.data.eventId}`);
+  revalidatePath("/financeiro");
+  return { success: "Custo atualizado.", version: Date.now() };
+}
+
+export async function removeContractedEventCost(_: ContractedEventFormState, formData: FormData): Promise<ContractedEventFormState> {
+  const parsed = contractedEventCostDeleteSchema.safeParse({ eventId: formData.get("eventId"), costId: formData.get("costId") });
+  if (!parsed.success) return { error: "Não foi possível identificar o custo.", version: Date.now() };
+  const { supabase } = await requireFinancialManager();
+  const { data: eventId, error } = await supabase.rpc("remove_contracted_event_cost", { p_cost_id: parsed.data.costId });
+  if (error) return { error: error.message, version: Date.now() };
+  revalidatePath(`/eventos/${eventId ?? parsed.data.eventId}`);
+  revalidatePath("/financeiro");
+  return { success: "Custo removido.", version: Date.now() };
+}
+
+function costRawValues(formData: FormData) {
+  return { eventId: String(formData.get("eventId") ?? ""), category: String(formData.get("category") ?? ""), status: String(formData.get("status") ?? ""), description: String(formData.get("description") ?? ""), estimatedAmount: String(formData.get("estimatedAmount") ?? ""), actualAmount: String(formData.get("actualAmount") ?? ""), dueDate: String(formData.get("dueDate") ?? ""), notes: String(formData.get("notes") ?? "") };
+}
+
 function paymentRawValues(formData: FormData) {
   return {
     eventId: String(formData.get("eventId") ?? ""),
@@ -781,8 +870,7 @@ type ContractDocumentForm = {
   contractingPartyAddress?: string;
   contractingPartyRepresentative?: string;
   eventSchedule?: string;
-  specialClauses?: string;
-  notes?: string;
+  standardClauses: Array<"fornecedores_externos" | "decoracao_externa" | "consumo_aberto" | "hora_extra">;
 };
 
 function suggestContractDocumentKind(event: ContractDocumentEvent) {
@@ -811,6 +899,7 @@ function buildContractDocumentContent({
   const extraGuestFee = Math.round(packageUnitPrice * 1.2);
   const leadName = form.contractingPartyName ?? event.leads?.company ?? event.leads?.name ?? "A preencher";
   const packageLines = buildContractPackageLines(quotePackages);
+  const standardClauseLines = buildStandardClauseLines(form.standardClauses);
   const activePayments = payments.filter((payment) => payment.status !== "cancelado");
   const paymentLines = activePayments.length
     ? activePayments
@@ -935,8 +1024,7 @@ function buildContractDocumentContent({
       "## CLÁUSULA DÉCIMA SEXTA - DAS ALTERAÇÕES E COMUNICAÇÕES",
       "16.1. Alterações de escopo, pacote, cardápio, valores, datas, horários ou responsabilidades somente terão validade quando registradas por escrito, inclusive por meio eletrônico que permita comprovar autoria e conteúdo.",
       "16.2. A tolerância de uma parte quanto ao descumprimento de obrigação não importará renúncia, novação ou alteração contratual.",
-      form.specialClauses ? `Condições específicas: ${form.specialClauses}` : "",
-      form.notes ? `Observações contratuais adicionais: ${form.notes}` : "",
+      ...standardClauseLines,
     ]
       .filter(Boolean)
       .join("\n"),
@@ -1020,8 +1108,7 @@ function buildConsentTermContent({ event, form, leadName, packageLines, paymentL
       "A data é confirmada após o cumprimento da condição de sinal acordada. Alterações de data, convidados, horário, pacote ou itens dependem de disponibilidade e podem alterar o valor.",
       "Cancelamentos e reagendamentos serão tratados conforme a antecedência e os custos já assumidos pela Sunrise Celebrations.",
       "A pessoa responsável declara ciência das regras de uso do espaço e responde pela conduta de convidados e fornecedores externos.",
-      form.specialClauses ? `Condição específica: ${form.specialClauses}` : "",
-      form.notes ? `Observação: ${form.notes}` : "",
+      ...buildStandardClauseLines(form.standardClauses),
     ].filter(Boolean).join("\n"),
     [
       "## ACEITE",
@@ -1036,6 +1123,16 @@ function buildConsentTermContent({ event, form, leadName, packageLines, paymentL
       "SUNRISE SERVIÇOS DE BARES E RESTAURANTES LTDA.",
     ].join("\n"),
   ].join("\n\n");
+}
+
+function buildStandardClauseLines(clauses: ContractDocumentForm["standardClauses"]) {
+  const texts: Record<ContractDocumentForm["standardClauses"][number], string> = {
+    fornecedores_externos: "Fornecedores externos deverão ser previamente identificados e observar horários, regras de acesso, montagem, desmontagem e segurança definidos pela CONTRATADA.",
+    decoracao_externa: "A decoração ou montagem externa dependerá de aprovação prévia e não poderá danificar instalações, obstruir circulação, saídas ou equipamentos de segurança.",
+    consumo_aberto: "Os consumos não incluídos no valor fechado serão apurados por comandas ou registros operacionais e cobrados após o evento conforme as condições informadas à CONTRATANTE.",
+    hora_extra: "A extensão do horário dependerá de disponibilidade operacional, autorização da CONTRATADA e contratação complementar antes do período adicional.",
+  };
+  return clauses.map((clause, index) => `16.${index + 3}. ${texts[clause]}`);
 }
 
 function selectContractSections(sections: string[], kind: string) {
@@ -1156,7 +1253,7 @@ function formatDate(value: string) {
 
 async function requireContractDocumentManager() {
   const context = await requireUser();
-  if (!context.permissions.some((permission) => permission === "gerencia" || permission === "admin_owner")) {
+  if (!context.permissions.some((permission) => permission === "gerencia" || permission === "direcao" || permission === "admin_owner")) {
     redirect("/painel?error=forbidden");
   }
   return context;
@@ -1164,7 +1261,7 @@ async function requireContractDocumentManager() {
 
 async function requireFinancialManager() {
   const context = await requireUser();
-  if (!context.permissions.some((permission) => permission === "financeiro" || permission === "gerencia" || permission === "admin_owner")) {
+  if (!context.permissions.some((permission) => permission === "financeiro" || permission === "gerencia" || permission === "direcao" || permission === "admin_owner")) {
     redirect("/painel?error=forbidden");
   }
   return context;
@@ -1172,7 +1269,7 @@ async function requireFinancialManager() {
 
 async function requireEventManager() {
   const context = await requireUser();
-  if (!context.permissions.some((permission) => permission === "atendimento" || permission === "gerencia" || permission === "admin_owner")) {
+  if (!context.permissions.some((permission) => permission === "atendimento" || permission === "gerencia" || permission === "direcao" || permission === "admin_owner")) {
     redirect("/painel?error=forbidden");
   }
   return context;

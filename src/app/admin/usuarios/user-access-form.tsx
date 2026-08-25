@@ -8,8 +8,9 @@ const initialState: UserAccessFormState = {};
 
 const permissionLabels: Record<string, { label: string; description: string }> = {
   atendimento: { label: "Atendimento", description: "Pode criar contatos, atender conversas e movimentar a jornada." },
-  financeiro: { label: "Financeiro", description: "Reservado para rotinas financeiras futuras." },
-  gerencia: { label: "Gerência", description: "Reservado para supervisão e relatórios futuros." },
+  financeiro: { label: "Financeiro", description: "Acessa pagamentos e informações financeiras, sem acesso ao CRM." },
+  gerencia: { label: "Gerência", description: "Acessa operação, CRM, contratos e financeiro." },
+  direcao: { label: "Direção", description: "Acessa CRM, contratos, aprovações e financeiro." },
   admin_owner: { label: "Admin owner", description: "Pode administrar opções e usuários." },
 };
 

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createConversationSchema, conversationMessageSchema, handoffSchema } from "@/lib/domain/conversation";
 import { leadSchema, leadStatuses } from "@/lib/domain/lead";
 import { requireLeadManager } from "@/lib/auth";
+import { sendWhatsAppText } from "@/lib/whatsapp";
 
 export type ConversationFormState = { error?: string; success?: string; fieldErrors?: Record<string, string[]>; values?: Record<string, string>; version?: number };
 export type LeadUpdateFormValues = Record<"leadId" | "conversationId" | "name" | "company" | "phone" | "source" | "eventType" | "desiredDate" | "guestCount" | "notes", string>;
@@ -62,7 +63,7 @@ export async function addHumanMessage(_: ConversationFormState, formData: FormDa
   if (!parsed.success) return { error: "Informe uma resposta.", fieldErrors: parsed.error.flatten().fieldErrors, values: { body: String(formData.get("body") ?? "") }, version: Date.now() };
 
   const { supabase, user } = await requireLeadManager();
-  const { data: conversation } = await supabase.from("conversations").select("id,status,lead_id").eq("id", parsed.data.conversationId).single();
+  const { data: conversation } = await supabase.from("conversations").select("id,status,lead_id,channel,external_contact_id,external_phone_number_id").eq("id", parsed.data.conversationId).single();
   if (!conversation) return { error: "Atendimento não encontrado.", version: Date.now() };
   if (conversation.status === "encerrado") return { error: "Este atendimento já foi encerrado.", values: { body: parsed.data.body }, version: Date.now() };
 
@@ -73,9 +74,18 @@ export async function addHumanMessage(_: ConversationFormState, formData: FormDa
   if (updateError) return { error: "Não foi possível assumir o atendimento antes de responder.", values: { body: parsed.data.body }, version: Date.now() };
   await promoteLeadToAtendimento(supabase, conversation.lead_id);
 
+  let externalMessageId: string | null = null;
+  if (conversation.channel === "whatsapp_cloud") {
+    if (!conversation.external_contact_id || !conversation.external_phone_number_id) return { error: "Este atendimento não possui os identificadores necessários para envio pelo WhatsApp.", values: { body: parsed.data.body }, version: Date.now() };
+    try {
+      externalMessageId = await sendWhatsAppText({ body: parsed.data.body, phoneNumberId: conversation.external_phone_number_id, to: conversation.external_contact_id });
+    } catch (error) {
+      return { error: error instanceof Error ? `WhatsApp recusou o envio: ${error.message}` : "Não foi possível enviar pelo WhatsApp.", values: { body: parsed.data.body }, version: Date.now() };
+    }
+  }
   const { error } = await supabase
     .from("conversation_messages")
-    .insert({ conversation_id: parsed.data.conversationId, author: "humano", actor_id: user.id, body: parsed.data.body });
+    .insert({ conversation_id: parsed.data.conversationId, author: "humano", actor_id: user.id, body: parsed.data.body, external_message_id: externalMessageId, delivery_status: externalMessageId ? "sent" : null });
   if (error) return { error: "Não foi possível registrar a resposta.", values: { body: parsed.data.body }, version: Date.now() };
 
   revalidatePath("/atendimentos");

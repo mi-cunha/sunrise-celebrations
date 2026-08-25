@@ -8,12 +8,14 @@
 - [x] Fase 1c operacional: edição de leads no atendimento, filtros, checklist de qualificação, histórico do lead no atendimento, gestão básica de usuários e métricas iniciais.
 - [x] Fase 1c pendente de validação externa: recuperação de senha pós-configuração.
 - [ ] Fase 1c evolução opcional: painel de acompanhamento comercial mais completo.
+- [x] CRM comercial inicial: área segregada do financeiro, busca, filtros, indicadores e jornada por etapas com contato, responsável e orçamento mais recente.
 - [x] Fase 2: orçamentos. Modelo de orçamento, criação a partir do lead, catálogo editável de serviços, itens, edição/remoção de itens, total, status, histórico, aprovação/recusa com motivo, trava pós-aprovação com liberação admin, proposta visual para impressão/PDF, logo configurável por arquivo e condições padronizadas de proposta.
 - [ ] Fase 3: contratação e operação. Iniciada: evento contratado criado a partir de orçamento aprovado, listagem de eventos, página de detalhe, status operacional, histórico, contrato e pagamentos com acesso financeiro, checklist operacional editável/reordenável com responsável, prazo e observações, cronograma operacional editável, fornecedores do evento, ficha operacional interna gerável, catálogo inicial de pacotes por tipo de evento e pacote conectado ao orçamento, proposta e ficha operacional.
 - [ ] Fase 3a: contratos e termos — sugestão de contrato completo, contrato simplificado ou termo de consentimento; rascunhos versionados, revisão humana obrigatória, emissão final e consulta de versões implementados. Pendente: templates configuráveis e sincronização completa dos estados enviado/assinado/cancelado com a versão emitida.
 - [ ] Fase 3b: financeiro e custos — recebimentos, parcelas, custos internos, comissões, margens e indicadores, protegidos pelas permissões `financeiro`, `gerencia` e `admin_owner`.
 - [ ] Fase 3c: hospitalidade e materiais — cortesias e materiais impressos planejados, com responsáveis, status, visibilidade e custo estimado integrado ao financeiro.
-- [ ] Fase 4: WhatsApp oficial como adaptador — webhooks, envio, templates aprovados e observabilidade, após a validação da Fase 1b.
+- [x] Agenda operacional inicial: calendário mensal com eventos ativos, datas internas editáveis, feriados nacionais automáticos, feriados do Ceará/Fortaleza e confirmação de conflito na aprovação do orçamento, com limite de três eventos ativos por dia.
+- [ ] Fase 4: WhatsApp oficial como adaptador — fundação implementada com webhook assinado, entrada idempotente e envio de texto humano. Pendente: configuração/validação na Meta, mensagens não textuais, templates aprovados e observabilidade operacional.
 - [ ] Fase 5: multiempresa e comercialização.
 
 ## Critério para iniciar Fase 3
@@ -43,7 +45,9 @@ O detalhamento completo do adendo está em `docs/addenda/contratos-financeiro-ho
 
 ## Pendências futuras registradas
 
+- Criar a permissão/perfil `direcao` e exigir aprovação da Direção na etapa de revisão humana antes da emissão final do contrato; até essa implementação, a revisão permanece restrita a `gerencia` e `admin_owner`.
 - Definir política de retenção documental: preservar versões emitidas/assinadas e avaliar arquivamento ou exclusão apenas de rascunhos antigos após prazo administrativo definido; não apagar automaticamente ao concluir o evento.
+- Adicionar insights de IA à agenda, incluindo feriado prolongado, concentração de eventos, semanas de alta demanda e risco operacional; os cálculos de calendário devem continuar determinísticos e a IA apenas explicar os resultados.
 - Incluir imagens por pacote na proposta: as imagens devem ficar em um banco/catálogo próprio e entrar automaticamente na proposta conforme o pacote escolhido.
 - Refinar a diagramação dos pacotes na proposta e na ficha operacional após testes com pacotes reais.
 - Criar uma página de ajuda/manual de uso do sistema, com linguagem simples para qualquer usuário entender fluxos como lead, atendimento, orçamento, proposta, evento contratado, checklist e ficha operacional.

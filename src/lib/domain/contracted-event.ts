@@ -20,6 +20,9 @@ export type ContractedEventPaymentStatus = (typeof contractedEventPaymentStatuse
 export const contractedEventPaymentMethods = ["pix", "cartao_credito", "cartao_debito", "boleto", "transferencia", "dinheiro", "outro"] as const;
 export type ContractedEventPaymentMethod = (typeof contractedEventPaymentMethods)[number];
 
+export const contractedEventCostCategories = ["buffet", "bebidas", "equipe", "fornecedor", "decoracao", "estrutura", "transporte", "cortesia", "comissao", "outro"] as const;
+export const contractedEventCostStatuses = ["previsto", "confirmado", "pago", "cancelado"] as const;
+
 export const contractedEventBillingModels = ["orcamento_fechado", "consumo_aberto_pos_evento", "pre_pago_com_consumo_aberto"] as const;
 export type ContractedEventBillingModel = (typeof contractedEventBillingModels)[number];
 
@@ -165,6 +168,7 @@ export const contractedEventContractSchema = z.object({
 });
 
 export const contractedEventContractDocumentKinds = ["auto", "contrato_completo", "termo_simplificado", "aceite_proposta"] as const;
+export const contractedEventStandardClauses = ["fornecedores_externos", "decoracao_externa", "consumo_aberto", "hora_extra"] as const;
 export type ContractedEventContractDocumentKind = (typeof contractedEventContractDocumentKinds)[number];
 
 export const contractedEventContractDocumentSchema = z.object({
@@ -175,9 +179,18 @@ export const contractedEventContractDocumentSchema = z.object({
   contractingPartyAddress: z.string().trim().max(240, "Use até 240 caracteres.").optional().transform((value) => value || undefined),
   contractingPartyRepresentative: z.string().trim().max(180, "Use até 180 caracteres.").optional().transform((value) => value || undefined),
   eventSchedule: z.string().trim().max(120, "Use até 120 caracteres.").optional().transform((value) => value || undefined),
-  specialClauses: z.string().trim().max(1600, "Use até 1600 caracteres.").optional().transform((value) => value || undefined),
-  notes: optionalNotes,
+  standardClauses: z.array(z.enum(contractedEventStandardClauses)).max(contractedEventStandardClauses.length),
 });
+
+export function contractedEventStandardClauseLabel(clause: string) {
+  const labels: Record<string, string> = {
+    fornecedores_externos: "Haverá fornecedores externos",
+    decoracao_externa: "Haverá decoração ou montagem externa",
+    consumo_aberto: "Haverá consumo aberto ou comandas individuais",
+    hora_extra: "O evento poderá contratar horas adicionais",
+  };
+  return labels[clause] ?? clause;
+}
 
 export const contractedEventBillingModelSchema = z.object({
   eventId: z.string().uuid(),
@@ -214,6 +227,20 @@ export const contractedEventPaymentSchema = z
 export const contractedEventPaymentUpdateSchema = contractedEventPaymentSchema.extend({
   paymentId: z.string().uuid(),
 });
+
+export const contractedEventCostSchema = z.object({
+  eventId: z.string().uuid(),
+  category: z.enum(contractedEventCostCategories),
+  status: z.enum(contractedEventCostStatuses),
+  description: z.string().trim().min(2, "Informe a descrição do custo.").max(160, "Use até 160 caracteres."),
+  estimatedAmount: z.string().trim().min(1, "Informe o valor previsto.").transform(parseCurrencyToCents).refine((value) => value > 0, "Informe um valor maior que zero."),
+  actualAmount: z.string().trim().optional().transform((value) => (value ? parseCurrencyToCents(value) : undefined)).refine((value) => value === undefined || value >= 0, "Informe um valor realizado válido."),
+  dueDate: optionalDate,
+  notes: optionalNotes,
+});
+
+export const contractedEventCostUpdateSchema = contractedEventCostSchema.extend({ costId: z.string().uuid() });
+export const contractedEventCostDeleteSchema = z.object({ eventId: z.string().uuid(), costId: z.string().uuid() });
 
 export const contractedEventPaymentPlanSchema = z
   .object({
@@ -345,6 +372,16 @@ export function contractedEventPaymentStatusLabel(status: string) {
     atrasado: "Atrasado",
     cancelado: "Cancelado",
   };
+  return labels[status] ?? status;
+}
+
+export function contractedEventCostCategoryLabel(category: string) {
+  const labels: Record<string, string> = { buffet: "Buffet", bebidas: "Bebidas", equipe: "Equipe", fornecedor: "Fornecedor", decoracao: "Decoração", estrutura: "Estrutura", transporte: "Transporte", cortesia: "Cortesia", comissao: "Comissão", outro: "Outro" };
+  return labels[category] ?? category;
+}
+
+export function contractedEventCostStatusLabel(status: string) {
+  const labels: Record<string, string> = { previsto: "Previsto", confirmado: "Confirmado", pago: "Pago", cancelado: "Cancelado" };
   return labels[status] ?? status;
 }
 

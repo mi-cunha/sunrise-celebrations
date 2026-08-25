@@ -7,7 +7,8 @@ import { contractedEventBillingModelLabel, contractedEventContractStatusLabel, c
 import { formatCurrencyFromCents, quoteEventAreaLabel, quoteStatusLabel } from "@/lib/domain/quote";
 import { requireUser } from "@/lib/auth";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
-import { BillingModelForm, ChecklistItemCard, ChecklistItemForm, ContractedEventNotesForm, ContractedEventStatusForm, ContractDocumentForm, ContractForm, OperationalBriefForm, PaymentCard, PaymentForm, PaymentPlanForm, TimelineEntryCard, TimelineEntryForm, VendorCard, VendorForm } from "./event-forms";
+import { BillingModelForm, ChecklistItemCard, ChecklistItemForm, ContractedEventNotesForm, ContractedEventStatusForm, ContractDocumentForm, OperationalBriefForm, PaymentCard, PaymentForm, PaymentPlanForm, TimelineEntryCard, TimelineEntryForm, VendorCard, VendorForm } from "./event-forms";
+import { CostCard, CostForm, type EventCost } from "./cost-forms";
 
 type ContractedEventDetail = {
   id: string;
@@ -26,6 +27,7 @@ type ContractedEventDetail = {
   quotes: { id: string; title: string; status: string; total_amount_cents: number } | null;
   contracted_event_contracts: ContractSummary[] | ContractSummary | null;
   contracted_event_payments: PaymentSummary[];
+  contracted_event_costs: EventCost[];
   contracted_event_checklist: ChecklistItem[];
   contracted_event_timeline: TimelineEntry[];
   contracted_event_vendors: Vendor[];
@@ -130,13 +132,13 @@ export default async function EventDetailPage({
   const { id } = await params;
   const query = await searchParams;
   const { supabase, permissions } = await requireUser();
-  const canManageEvents = permissions.some((permission) => permission === "atendimento" || permission === "gerencia" || permission === "admin_owner");
-  const canManageFinancials = permissions.some((permission) => permission === "financeiro" || permission === "gerencia" || permission === "admin_owner");
-  const canGenerateContractDocument = permissions.some((permission) => permission === "gerencia" || permission === "admin_owner");
+  const canManageEvents = permissions.some((permission) => permission === "atendimento" || permission === "gerencia" || permission === "direcao" || permission === "admin_owner");
+  const canManageFinancials = permissions.some((permission) => permission === "financeiro" || permission === "gerencia" || permission === "direcao" || permission === "admin_owner");
+  const canGenerateContractDocument = permissions.some((permission) => permission === "gerencia" || permission === "direcao" || permission === "admin_owner");
 
   const { data: event, error } = await supabase
     .from("contracted_events")
-    .select("id,title,status,event_type,event_area,event_date,guest_count,billing_model,billing_notes,notes,created_at,updated_at,leads(id,name,company,phone),quotes(id,title,status,total_amount_cents),contracted_event_contracts(id,status,signed_at,notes),contracted_event_payments(id,kind,status,amount_cents,due_date,paid_at,payment_method,notes),contracted_event_checklist(id,title,is_done,sort_order,completed_at,assigned_to,due_date,notes),contracted_event_timeline(id,title,start_time,end_time,location,assigned_to,notes,sort_order),contracted_event_vendors(id,category,name,contact_name,phone,email,status,notes),contracted_event_history(id,action,metadata,created_at,profiles(display_name)),contracted_event_documents(id,document_type,title,content,updated_at),contracted_event_contract_document_versions(id,version,document_kind,status,title,created_at,updated_at,reviewed_at,issued_at)")
+    .select("id,title,status,event_type,event_area,event_date,guest_count,billing_model,billing_notes,notes,created_at,updated_at,leads(id,name,company,phone),quotes(id,title,status,total_amount_cents),contracted_event_contracts(id,status,signed_at,notes),contracted_event_payments(id,kind,status,amount_cents,due_date,paid_at,payment_method,notes),contracted_event_costs(id,category,status,description,estimated_amount_cents,actual_amount_cents,due_date,notes),contracted_event_checklist(id,title,is_done,sort_order,completed_at,assigned_to,due_date,notes),contracted_event_timeline(id,title,start_time,end_time,location,assigned_to,notes,sort_order),contracted_event_vendors(id,category,name,contact_name,phone,email,status,notes),contracted_event_history(id,action,metadata,created_at,profiles(display_name)),contracted_event_documents(id,document_type,title,content,updated_at),contracted_event_contract_document_versions(id,version,document_kind,status,title,created_at,updated_at,reviewed_at,issued_at)")
     .eq("id", id)
     .maybeSingle();
   const { data: profiles } = await supabase.from("profiles").select("id,display_name").eq("is_active", true).order("display_name");
@@ -162,6 +164,10 @@ export default async function EventDetailPage({
   const payments = [...(detail.contracted_event_payments ?? [])].sort((left, right) => (left.due_date ?? "9999-12-31").localeCompare(right.due_date ?? "9999-12-31"));
   const paidAmount = payments.filter((payment) => payment.status === "pago").reduce((total, payment) => total + payment.amount_cents, 0);
   const openAmount = payments.filter((payment) => payment.status !== "pago" && payment.status !== "cancelado").reduce((total, payment) => total + payment.amount_cents, 0);
+  const costs = [...(detail.contracted_event_costs ?? [])].sort((left, right) => left.category.localeCompare(right.category, "pt-BR") || left.description.localeCompare(right.description, "pt-BR"));
+  const totalCosts = costs.filter((cost) => cost.status !== "cancelado").reduce((total, cost) => total + (cost.actual_amount_cents ?? cost.estimated_amount_cents), 0);
+  const approvedRevenue = detail.quotes?.total_amount_cents ?? 0;
+  const estimatedMargin = approvedRevenue - totalCosts;
   const history = [...(detail.contracted_event_history ?? [])].sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime());
   const assignees = (profiles ?? []) as Assignee[];
   const assigneeNames = new Map(assignees.map((profile) => [profile.id, profile.display_name ?? "Usuário"]));
@@ -248,45 +254,57 @@ export default async function EventDetailPage({
             <section className="rounded-lg border border-[#dbe3dc] bg-white p-4">
               <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div>
-                  <h2 className="font-semibold">Contrato, cobrança e pagamentos</h2>
+                  <h2 className="font-semibold">Pagamentos e contrato</h2>
                   <p className="mt-1 text-sm text-slate-600">Controle interno do evento. Esta área não aparece na ficha operacional.</p>
                 </div>
-                <div className="grid gap-2 text-sm sm:grid-cols-3">
+                <div className="grid gap-2 text-sm sm:grid-cols-2 xl:grid-cols-5">
                   <FinanceBadge label="Contrato" value={contract ? contractedEventContractStatusLabel(contract.status) : "Pendente"} />
                   <FinanceBadge label="Pago" value={formatCurrencyFromCents(paidAmount)} />
                   <FinanceBadge label="Em aberto" value={formatCurrencyFromCents(openAmount)} />
+                  <FinanceBadge label="Custos" value={formatCurrencyFromCents(totalCosts)} />
+                  <FinanceBadge label="Margem estimada" value={formatCurrencyFromCents(estimatedMargin)} />
                 </div>
               </div>
 
-              <div className="mt-5 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-                <div className="space-y-5">
+              <div className="mt-5 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+                <div className="space-y-5 rounded-lg border border-[#dbe3dc] bg-white p-4">
+                  <div>
+                    <h3 className="font-semibold">1. Cobrança e pagamentos</h3>
+                    <p className="mt-1 text-sm text-slate-600">Cadastre o plano de pagamento antes de gerar a versão contratual.</p>
+                  </div>
+                  <BillingModelForm billing={{ billing_model: detail.billing_model, billing_notes: detail.billing_notes }} eventId={detail.id} />
+                  {payments.length ? (
+                    <div className="space-y-3">
+                      {payments.map((payment) => (
+                        <PaymentCard key={payment.id} eventId={detail.id} payment={payment} />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="rounded-lg bg-[#fbf8f1] p-3 text-sm text-slate-600">Nenhum pagamento cadastrado.</p>
+                  )}
+                  {detail.quotes && <PaymentPlanForm eventId={detail.id} totalAmountCents={detail.quotes.total_amount_cents} />}
+                  <PaymentForm eventId={detail.id} />
+                </div>
+                <div className="space-y-5 rounded-lg border border-[#dbe3dc] bg-white p-4">
+                  <div>
+                    <h3 className="font-semibold">2. Contrato</h3>
+                    <p className="mt-1 text-sm text-slate-600">Gere, revise, emita e acompanhe o mesmo documento até a assinatura.</p>
+                  </div>
                   {detail.quotes?.status === "aprovado" ? (
-                    <>
-                      <ContractForm contract={contract ?? undefined} eventId={detail.id} />
-                      {canGenerateContractDocument && <ContractDocumentForm document={latestContractVersion ?? undefined} eventId={detail.id} />}
-                    </>
+                    canGenerateContractDocument ? <ContractDocumentForm document={latestContractVersion ?? undefined} eventId={detail.id} /> : <p className="rounded-lg bg-[#fbf8f1] p-3 text-sm text-slate-600">A emissão e a atualização do contrato são restritas à gerência.</p>
                   ) : (
                     <div className="rounded-lg border border-[#dbe3dc] bg-[#f8fafc] p-4">
                       <h3 className="font-semibold">Contrato indisponível</h3>
                       <p className="mt-1 text-sm text-slate-600">A área de contrato será liberada após a aprovação do orçamento e a conclusão das escolhas obrigatórias do pacote.</p>
                     </div>
                   )}
-                  <BillingModelForm billing={{ billing_model: detail.billing_model, billing_notes: detail.billing_notes }} eventId={detail.id} />
                 </div>
-                <div className="rounded-lg border border-[#dbe3dc] bg-white p-4">
-                  <h3 className="font-semibold">Pagamentos</h3>
-                  {payments.length ? (
-                    <div className="mt-4 space-y-3">
-                      {payments.map((payment) => (
-                        <PaymentCard key={payment.id} eventId={detail.id} payment={payment} />
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="mt-4 rounded-lg bg-[#fbf8f1] p-3 text-sm text-slate-600">Nenhum pagamento cadastrado.</p>
-                  )}
-                  {detail.quotes && <PaymentPlanForm eventId={detail.id} totalAmountCents={detail.quotes.total_amount_cents} />}
-                  <PaymentForm eventId={detail.id} />
-                </div>
+              </div>
+
+              <div className="mt-4 rounded-lg border border-[#dbe3dc] bg-white p-4">
+                <div className="mb-4"><h3 className="font-semibold">3. Custos e margem</h3><p className="mt-1 text-sm text-slate-600">Custos internos não aparecem na proposta, no contrato ou na ficha operacional.</p></div>
+                {costs.length ? <div className="mb-4 grid gap-3 md:grid-cols-2">{costs.map((cost) => <CostCard key={cost.id} eventId={detail.id} cost={cost} />)}</div> : <p className="mb-4 rounded-lg bg-[#fbf8f1] p-3 text-sm text-slate-600">Nenhum custo interno cadastrado.</p>}
+                <CostForm eventId={detail.id} />
               </div>
             </section>
           )}

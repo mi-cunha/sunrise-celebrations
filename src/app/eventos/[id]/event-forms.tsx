@@ -1,11 +1,14 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   contractedEventBillingModelLabel,
   contractedEventBillingModels,
   contractedEventContractDocumentKindLabel,
   contractedEventContractDocumentKinds,
+  contractedEventStandardClauseLabel,
+  contractedEventStandardClauses,
   contractedEventContractStatuses,
   contractedEventContractStatusLabel,
   contractedEventPaymentKindLabel,
@@ -28,11 +31,14 @@ import {
   addContractedEventVendor,
   addContractedEventTimelineEntry,
   addContractedEventChecklistItem,
+  cancelContractDocumentVersion,
   generateContractedEventContractDocument,
   generateContractedEventPaymentPlan,
   generateEventOperationalBrief,
   moveContractedEventChecklistItem,
   issueContractDocumentVersion,
+  markContractDocumentVersionSent,
+  markContractDocumentVersionSigned,
   removeContractedEventChecklistItem,
   removeContractedEventPayment,
   removeContractedEventTimelineEntry,
@@ -499,11 +505,19 @@ export function ContractForm({ contract, eventId }: { contract?: ContractForForm
 }
 
 export function ContractDocumentForm({ document, eventId }: { document?: ContractDocumentForForm; eventId: string }) {
+  const router = useRouter();
   const [state, action, pending] = useActionState(generateContractedEventContractDocument, initialState);
   const [reviewState, reviewAction, reviewPending] = useActionState(reviewContractDocumentVersion, initialState);
   const [issueState, issueAction, issuePending] = useActionState(issueContractDocumentVersion, initialState);
+  const [sendState, sendAction, sendPending] = useActionState(markContractDocumentVersionSent, initialState);
+  const [signState, signAction, signPending] = useActionState(markContractDocumentVersionSigned, initialState);
+  const [cancelState, cancelAction, cancelPending] = useActionState(cancelContractDocumentVersion, initialState);
   const fieldErrors = useMemo(() => state.fieldErrors ?? {}, [state.fieldErrors]);
   const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    if (reviewState.success || issueState.success || sendState.success || signState.success || cancelState.success) router.refresh();
+  }, [cancelState.success, issueState.success, reviewState.success, router, sendState.success, signState.success]);
 
   useEffect(() => {
     const firstInvalidField = Object.keys(fieldErrors).find((field) => fieldErrors[field]?.length);
@@ -515,11 +529,11 @@ export function ContractDocumentForm({ document, eventId }: { document?: Contrac
   }, [fieldErrors]);
 
   return (
-    <details className="rounded-xl border border-[#dbe3dc] bg-white p-5" open={!document || Boolean(state.error)}>
-      <summary className="cursor-pointer list-none font-semibold text-[#18352d]">Documento do contrato</summary>
-      <form ref={formRef} action={action} className="mt-4 border-t border-[#edf1ee] pt-4">
+    <details className="overflow-hidden rounded-xl border border-[#dbe3dc] bg-white" open={!document || Boolean(state.error)}>
+      <summary className="flex w-full cursor-pointer list-none items-center justify-between p-5 font-semibold text-[#18352d] transition hover:bg-[#eef6fb]">Elaboração e acompanhamento do contrato</summary>
+      <form ref={formRef} action={action} className="border-t border-[#edf1ee] p-5">
         <input type="hidden" name="eventId" value={eventId} />
-        <p className="text-sm text-slate-600">Preencha os dados das partes e as condições específicas antes de emitir o contrato.</p>
+        <p className="text-sm text-slate-600">Preencha os dados das partes e selecione as condições padronizadas antes de gerar o contrato.</p>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <div className="md:col-span-2">
             <label htmlFor="contract-document-kind">Tipo de documento</label>
@@ -568,18 +582,21 @@ export function ContractDocumentForm({ document, eventId }: { document?: Contrac
             {fieldErrors.eventSchedule?.[0] && <p className="mt-1 text-sm text-red-700">{fieldErrors.eventSchedule[0]}</p>}
           </div>
           <div className="md:col-span-2">
-            <label htmlFor="contract-specialClauses">Cláusulas ou ajustes específicos</label>
-            <textarea id="contract-specialClauses" name="specialClauses" rows={4} defaultValue={state.values?.specialClauses ?? ""} placeholder="Ex.: consumo aberto, restrições, fornecedores externos, itens extras aprovados." className={fieldErrors.specialClauses ? "border-red-500 bg-red-50" : ""} />
-            {fieldErrors.specialClauses?.[0] && <p className="mt-1 text-sm text-red-700">{fieldErrors.specialClauses[0]}</p>}
-          </div>
-          <div className="md:col-span-2">
-            <label htmlFor="contract-document-notes">Observações contratuais adicionais</label>
-            <textarea id="contract-document-notes" name="notes" rows={3} defaultValue={state.values?.notes ?? ""} placeholder="Somente informações que devem constar no documento enviado à contratante." />
-            {fieldErrors.notes?.[0] && <p className="mt-1 text-sm text-red-700">{fieldErrors.notes[0]}</p>}
+            <p className="font-semibold">Condições padronizadas aplicáveis</p>
+            <p className="mt-1 text-xs text-slate-500">Selecione somente as situações que fazem parte deste evento. O sistema incluirá o texto aprovado no documento.</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {contractedEventStandardClauses.map((clause) => (
+                <label key={clause} className="flex cursor-pointer items-center gap-2 rounded-lg border border-[#dbe3dc] bg-white px-3 py-2 text-sm font-medium">
+                  <input type="checkbox" name="standardClauses" value={clause} className="h-4 w-4" />
+                  {contractedEventStandardClauseLabel(clause)}
+                </label>
+              ))}
+            </div>
           </div>
         </div>
         {document && (
           <div className="mt-4 rounded-lg border border-[#dbe3dc] bg-[#f8fbfd] p-3 text-sm">
+            <input type="hidden" name="versionId" value={document.id} />
             <p className="font-semibold">Versão {document.version} · {contractDocumentVersionStatusLabel(document.status)}</p>
             <p className="mt-1 text-xs text-slate-500">Gerada em {formatDateTime(document.created_at)}. Uma nova geração cria outra versão e preserva esta.</p>
             {document.status === "rascunho" && (
@@ -588,8 +605,25 @@ export function ContractDocumentForm({ document, eventId }: { document?: Contrac
             {document.status === "revisado" && (
               <button formAction={issueAction} name="versionId" value={document.id} disabled={issuePending} className="mt-3 rounded-lg bg-[#0f5f8f] px-3 py-2 text-xs font-semibold text-white hover:bg-[#083653] disabled:opacity-60">{issuePending ? "Emitindo..." : "Emitir versão final"}</button>
             )}
+            {document.status === "emitido" && (
+              <button formAction={sendAction} disabled={sendPending} className="mt-3 rounded-lg bg-[#0f5f8f] px-3 py-2 text-xs font-semibold text-white hover:bg-[#083653] disabled:opacity-60">{sendPending ? "Salvando..." : "Registrar envio"}</button>
+            )}
+            {document.status === "enviado" && (
+              <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,220px)_auto] sm:items-end">
+                <div>
+                  <label htmlFor="contract-version-signed-at">Assinado em</label>
+                  <input id="contract-version-signed-at" name="signedAt" type="date" className={signState.fieldErrors?.signedAt ? "border-red-500 bg-red-50" : ""} />
+                </div>
+                <button formAction={signAction} disabled={signPending} className="rounded-lg bg-[#2f7d62] px-3 py-2 text-xs font-semibold text-white hover:bg-[#25664f] disabled:opacity-60">{signPending ? "Salvando..." : "Registrar assinatura"}</button>
+              </div>
+            )}
+            {(document.status === "emitido" || document.status === "enviado") && (
+              <button formAction={cancelAction} disabled={cancelPending} className="ml-2 mt-3 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60">{cancelPending ? "Cancelando..." : "Cancelar versão"}</button>
+            )}
             {(reviewState.error || issueState.error) && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-2 text-xs text-red-800">{reviewState.error ?? issueState.error}</p>}
             {(reviewState.success || issueState.success) && <p role="status" className="mt-3 rounded-lg bg-[#edf5ee] p-2 text-xs text-[#356451]">{reviewState.success ?? issueState.success}</p>}
+            {(sendState.error || signState.error || cancelState.error) && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-2 text-xs text-red-800">{sendState.error ?? signState.error ?? cancelState.error}</p>}
+            {(sendState.success || signState.success || cancelState.success) && <p role="status" className="mt-3 rounded-lg bg-[#edf5ee] p-2 text-xs text-[#356451]">{sendState.success ?? signState.success ?? cancelState.success}</p>}
           </div>
         )}
         {state.error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">{state.error}</p>}

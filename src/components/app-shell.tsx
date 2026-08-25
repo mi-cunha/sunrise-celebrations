@@ -10,7 +10,10 @@ type CompanySettings = {
 export async function AppShell({ children, title }: { children: React.ReactNode; title: string }) {
   const supabase = await createClient();
   const { data: settings } = await supabase.from("company_settings").select("logo_url").eq("id", true).maybeSingle();
+  const { data: permissionRows } = await supabase.from("user_permissions").select("permission");
   const logoUrl = (settings as CompanySettings | null)?.logo_url;
+  const canSeeCrm = (permissionRows ?? []).some((row) => row.permission === "atendimento" || row.permission === "gerencia" || row.permission === "direcao" || row.permission === "admin_owner");
+  const canSeeFinancial = (permissionRows ?? []).some((row) => row.permission === "financeiro" || row.permission === "gerencia" || row.permission === "direcao" || row.permission === "admin_owner");
 
   return (
     <main className="min-h-screen">
@@ -18,7 +21,7 @@ export async function AppShell({ children, title }: { children: React.ReactNode;
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2">
           <Link href="/painel" className="flex items-center">
             {logoUrl ? (
-              <Image src={logoUrl} alt="Sunrise Celebrations" width={220} height={56} unoptimized className="h-10 w-auto object-contain sm:h-12" />
+              <Image src={logoUrl} alt="Sunrise Celebrations" width={300} height={76} unoptimized className="h-14 w-auto object-contain sm:h-16" />
             ) : (
               <span className="text-sm font-semibold tracking-[.16em] text-white">SUNRISE OS</span>
             )}
@@ -26,7 +29,10 @@ export async function AppShell({ children, title }: { children: React.ReactNode;
 
           <nav className="hidden items-center gap-1 md:flex">
             <NavLink href="/painel">Painel</NavLink>
+            {canSeeCrm && <NavLink href="/crm">CRM</NavLink>}
             <NavLink href="/eventos">Eventos</NavLink>
+            {canSeeFinancial && <NavLink href="/financeiro">Financeiro</NavLink>}
+            <NavLink href="/agenda">Agenda</NavLink>
             <NavLink href="/contratos">Contratos</NavLink>
             <NavLink href="/resumo-semanal">Resumo</NavLink>
             <details className="group relative">
@@ -63,7 +69,10 @@ export async function AppShell({ children, title }: { children: React.ReactNode;
             </summary>
             <div className="absolute right-0 z-30 mt-2 w-72 overflow-hidden rounded-lg border border-[#d9ded8] bg-[#fffdf8]">
               <MobileMenuLink href="/painel" label="Painel" />
+              {canSeeCrm && <MobileMenuLink href="/crm" label="CRM" />}
               <MobileMenuLink href="/eventos" label="Eventos" />
+              {canSeeFinancial && <MobileMenuLink href="/financeiro" label="Financeiro" />}
+              <MobileMenuLink href="/agenda" label="Agenda" />
               <MobileMenuLink href="/contratos" label="Contratos" />
               <MobileMenuLink href="/resumo-semanal" label="Resumo semanal" />
               <div className="border-t border-[#d9ded8] bg-[#f7f4ed] px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#5f7180]">

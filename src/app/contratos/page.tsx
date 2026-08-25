@@ -38,7 +38,7 @@ export default async function ContractsPage() {
   if (!hasSupabaseConfig()) return <SetupNotice />;
 
   const { supabase, permissions } = await requireUser();
-  const canSeeContracts = permissions.some((permission) => permission === "financeiro" || permission === "gerencia" || permission === "admin_owner");
+  const canSeeContracts = permissions.some((permission) => permission === "financeiro" || permission === "gerencia" || permission === "direcao" || permission === "admin_owner");
 
   if (!canSeeContracts) {
     return (

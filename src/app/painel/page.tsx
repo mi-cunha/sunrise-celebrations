@@ -49,7 +49,7 @@ export default async function Dashboard() {
 
   const { supabase, permissions } = await requireUser();
   const canCreateContact = canManageLeads(permissions);
-  const canSeeFinancial = permissions.some((permission) => permission === "financeiro" || permission === "gerencia" || permission === "admin_owner");
+  const canSeeFinancial = permissions.some((permission) => permission === "financeiro" || permission === "gerencia" || permission === "direcao" || permission === "admin_owner");
 
   const [{ data: leads }, { data: conversations }, { data: quotes }, { data: events }] = await Promise.all([
     supabase.from("leads").select("id,name,company,phone,status,created_at").order("created_at", { ascending: false }).limit(8),

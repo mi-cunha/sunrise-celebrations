@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const leadStatuses = ["novo", "em_atendimento", "qualificado", "orcamento_em_elaboracao", "proposta_enviada", "negociacao", "ganho", "perdido"] as const;
 export type LeadStatus = (typeof leadStatuses)[number];
-export const permissions = ["atendimento", "financeiro", "gerencia", "admin_owner"] as const;
+export const permissions = ["atendimento", "financeiro", "gerencia", "direcao", "admin_owner"] as const;
 export type Permission = (typeof permissions)[number];
 export const defaultEventTypes = ["Casamento", "Corporativo", "Aniversário", "Café da manhã", "Formatura", "Confraternização", "Brunch", "Almoço", "Jantar", "Outro"] as const;
 export const defaultLeadSources = ["WhatsApp", "Instagram", "Indicação", "Site", "Evento", "Parceiro", "Retorno", "Outro"] as const;
@@ -24,7 +24,7 @@ export const leadSchema = z.object({
 export type LeadInput = z.infer<typeof leadSchema>;
 
 export function canManageLeads(userPermissions: readonly string[]) {
-  return userPermissions.includes("atendimento") || userPermissions.includes("admin_owner");
+  return userPermissions.includes("atendimento") || userPermissions.includes("gerencia") || userPermissions.includes("direcao") || userPermissions.includes("admin_owner");
 }
 
 export function formatBrazilPhone(value: string) {

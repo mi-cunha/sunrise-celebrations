@@ -12,6 +12,7 @@ export type QuoteFormState = {
   fieldErrors?: Record<string, string[]>;
   values?: Record<string, string>;
   version?: number;
+  requiresDateConflictConfirmation?: boolean;
 };
 
 const createQuoteSchema = z.object({
@@ -218,25 +219,109 @@ export async function updateQuoteStatus(_: QuoteFormState, formData: FormData): 
   if (parsed.data.status === "aprovado") {
     const { data: quote, error: quoteError } = await supabase
       .from("quotes")
-      .select("quote_packages(id,unit_price_cents,event_package_catalog(event_package_items(id,category,show_in_proposal,is_choice,choice_group,choice_min)),quote_package_item_choices(package_item_id))")
+      .select("desired_date,quote_packages(id,unit_price_cents,event_package_catalog(event_package_items(id,category,show_in_proposal,is_choice,choice_group,choice_min)),quote_package_item_choices(package_item_id))")
       .eq("id", parsed.data.quoteId)
       .maybeSingle();
     if (quoteError) return { error: quoteError.message, values: { reason: parsed.data.reason ?? "" }, version: Date.now() };
 
     const approvalIssue = getQuoteApprovalIssue(quote as unknown as QuoteApprovalData | null);
     if (approvalIssue) return { error: approvalIssue, values: { reason: parsed.data.reason ?? "" }, version: Date.now() };
+
+    const { data: approvalResult, error: approvalError } = await supabase.rpc("approve_quote_and_create_event", {
+      p_quote_id: parsed.data.quoteId,
+      p_reason: parsed.data.reason ?? "",
+      p_confirm_date_conflict: formData.get("confirmDateConflict") === "true",
+    });
+    if (approvalError) {
+      return {
+        error: translateQuoteApprovalError(approvalError.message),
+        values: { reason: parsed.data.reason ?? "", status: parsed.data.status },
+        version: Date.now(),
+      };
+    }
+
+    const result = approvalResult as AtomicQuoteApprovalResult | null;
+    if (result?.requires_confirmation) {
+      const conflicts = result.conflicts ?? [];
+      return {
+        error: `A data já possui ${conflicts.length === 1 ? "um compromisso" : `${conflicts.length} compromissos`}: ${conflicts.join(", ")}. Confirme se deseja continuar.`,
+        values: { reason: parsed.data.reason ?? "", status: parsed.data.status },
+        requiresDateConflictConfirmation: true,
+        version: Date.now(),
+      };
+    }
+  } else {
+    const { error } = await supabase.rpc("update_quote_status", {
+      p_quote_id: parsed.data.quoteId,
+      p_status: parsed.data.status,
+      p_reason: parsed.data.reason ?? "",
+    });
+    if (error) {
+      const message = error.message.includes("decision reason is required") ? "Informe o motivo da aprovação ou recusa." : error.message;
+      return { error: message, values: { reason: parsed.data.reason ?? "", status: parsed.data.status }, version: Date.now() };
+    }
   }
-  const { error } = await supabase.rpc("update_quote_status", {
-    p_quote_id: parsed.data.quoteId,
-    p_status: parsed.data.status,
-    p_reason: parsed.data.reason ?? "",
-  });
-  if (error) return { error: error.message, version: Date.now() };
+
+  const { data: persistedQuote, error: verificationError } = await supabase
+    .from("quotes")
+    .select("status,contracted_events(id)")
+    .eq("id", parsed.data.quoteId)
+    .maybeSingle();
+  if (verificationError || !persistedQuote) {
+    return {
+      error: `A operação foi enviada, mas não foi possível confirmar o status salvo: ${verificationError?.message ?? "orçamento não encontrado"}`,
+      values: { reason: parsed.data.reason ?? "", status: parsed.data.status },
+      version: Date.now(),
+    };
+  }
+  if (persistedQuote.status !== parsed.data.status) {
+    return {
+      error: `O banco manteve o status “${persistedQuote.status}” em vez de “${parsed.data.status}”. Nenhuma confirmação visual foi aplicada.`,
+      values: { reason: parsed.data.reason ?? "", status: parsed.data.status },
+      version: Date.now(),
+    };
+  }
+  if (parsed.data.status === "aprovado" && toArray(persistedQuote.contracted_events).length === 0) {
+    return {
+      error: "O orçamento foi aprovado, mas o banco não retornou o evento vinculado. Recarregue a página antes de tentar novamente.",
+      values: { reason: parsed.data.reason ?? "", status: parsed.data.status },
+      version: Date.now(),
+    };
+  }
 
   revalidatePath(`/orcamentos/${parsed.data.quoteId}`);
   revalidatePath("/painel");
   revalidatePath("/atendimentos");
-  return { success: "Status atualizado.", version: Date.now() };
+  revalidatePath("/eventos");
+  revalidatePath("/agenda");
+  redirect(`/orcamentos/${parsed.data.quoteId}?statusUpdated=${parsed.data.status}`);
+}
+
+type AtomicQuoteApprovalResult = {
+  requires_confirmation: boolean;
+  conflicts?: string[];
+  event_id?: string;
+};
+
+function translateQuoteApprovalError(message: string) {
+  if (message.includes("event date capacity reached")) return "Esta data já atingiu o limite de 3 eventos ativos. Escolha outra data antes de aprovar.";
+  if (message.includes("event date is required")) return "Informe a data do evento antes de aprovar o orçamento.";
+  if (message.includes("decision reason is required")) return "Informe o motivo da aprovação.";
+  if (message.includes("permission denied")) return "Seu usuário não possui permissão para aprovar o orçamento e criar o evento.";
+  if (message.includes("approve_quote_and_create_event")) return "Aplique a migration de aprovação transacional no Supabase antes de continuar.";
+  return `Não foi possível aprovar o orçamento: ${message}`;
+}
+
+export async function confirmQuoteStatusWithDateConflict(formData: FormData) {
+  const quoteId = String(formData.get("quoteId") ?? "");
+  if (!z.string().uuid().safeParse(quoteId).success) redirect("/painel?error=invalid_quote");
+
+  formData.set("confirmDateConflict", "true");
+  const result = await updateQuoteStatus({}, formData);
+  if (result.error) {
+    redirect(`/orcamentos/${quoteId}?statusError=${encodeURIComponent(result.error)}`);
+  }
+  redirect(`/orcamentos/${quoteId}?statusUpdated=1`);
 }
 
 type QuoteApprovalPackageItem = {
@@ -255,6 +340,7 @@ type QuoteApprovalPackage = {
 };
 
 type QuoteApprovalData = {
+  desired_date: string | null;
   quote_packages: QuoteApprovalPackage[] | QuoteApprovalPackage | null;
 };
 
@@ -364,7 +450,7 @@ export async function removeQuoteProposalOption(_: QuoteFormState, formData: For
 
 async function requireQuoteManager() {
   const context = await requireUser();
-  if (!context.permissions.some((permission) => permission === "atendimento" || permission === "financeiro" || permission === "admin_owner")) {
+  if (!context.permissions.some((permission) => permission === "atendimento" || permission === "financeiro" || permission === "gerencia" || permission === "direcao" || permission === "admin_owner")) {
     redirect("/painel?error=forbidden");
   }
   return context;

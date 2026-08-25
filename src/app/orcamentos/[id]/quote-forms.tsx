@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { formatCurrencyFromCents, quoteEventAreaLabel, quoteEventAreas, quoteStatuses, quoteStatusLabel } from "@/lib/domain/quote";
-import { addQuoteItem, addQuoteProposalOption, removeQuoteItem, removeQuotePackage, removeQuoteProposalOption, setApprovedQuoteEditLock, setQuotePackage, setQuotePackageChoices, updateQuoteEventArea, updateQuoteItem, updateQuoteStatus, type QuoteFormState } from "../actions";
+import { addQuoteItem, addQuoteProposalOption, confirmQuoteStatusWithDateConflict, removeQuoteItem, removeQuotePackage, removeQuoteProposalOption, setApprovedQuoteEditLock, setQuotePackage, setQuotePackageChoices, updateQuoteEventArea, updateQuoteItem, updateQuoteStatus, type QuoteFormState } from "../actions";
 
 const initialState: QuoteFormState = {};
 
@@ -425,17 +425,46 @@ export function QuoteItemEditor({ canEdit, quoteId, item }: { canEdit: boolean; 
 
 export function QuoteStatusForm({ decisionReason, quoteId, status }: { decisionReason: string; quoteId: string; status: string }) {
   const [state, action, pending] = useActionState(updateQuoteStatus, initialState);
+  const [selectedStatus, setSelectedStatus] = useState(status);
+
+  if (state.requiresDateConflictConfirmation) {
+    return (
+      <form action={confirmQuoteStatusWithDateConflict} className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+        <h2 className="font-semibold">Confirmar aprovação</h2>
+        <input type="hidden" name="quoteId" value={quoteId} />
+        <input type="hidden" name="status" value="aprovado" />
+        <input type="hidden" name="reason" value={state.values?.reason ?? decisionReason} />
+        <input type="hidden" name="confirmDateConflict" value="true" />
+        <div className="mt-4">
+          <p className="text-sm text-amber-900">{state.error}</p>
+          <p className="mt-2 text-sm font-semibold text-amber-900">Ao continuar, o orçamento será aprovado e o evento será incluído nesta data.</p>
+        </div>
+        <dl className="mt-4 grid gap-3 rounded-lg border border-amber-200 bg-white p-4 text-sm sm:grid-cols-2">
+          <div>
+            <dt className="text-slate-500">Status que será salvo</dt>
+            <dd className="font-semibold">Aprovado</dd>
+          </div>
+          <div>
+            <dt className="text-slate-500">Motivo</dt>
+            <dd className="font-semibold">{state.values?.reason ?? decisionReason}</dd>
+          </div>
+        </dl>
+        <button type="submit" className="mt-4 rounded-lg bg-[#18352d] px-5 py-3 font-semibold text-white transition hover:bg-[#23483d] active:scale-[0.99]">
+          Confirmar e aprovar
+        </button>
+      </form>
+    );
+  }
+
   return (
     <form action={action} className="rounded-xl border border-[#dbe3dc] bg-white p-5">
       <h2 className="font-semibold">Status do orçamento</h2>
       <input type="hidden" name="quoteId" value={quoteId} />
       <div className="mt-4">
         <label htmlFor="status">Status</label>
-        <select id="status" name="status" defaultValue={status}>
+        <select id="status" name="status" value={selectedStatus} onChange={(event) => setSelectedStatus(event.target.value)}>
           {quoteStatuses.map((quoteStatus) => (
-            <option key={quoteStatus} value={quoteStatus}>
-              {quoteStatusLabel(quoteStatus)}
-            </option>
+            <option key={quoteStatus} value={quoteStatus}>{quoteStatusLabel(quoteStatus)}</option>
           ))}
         </select>
       </div>
@@ -445,8 +474,7 @@ export function QuoteStatusForm({ decisionReason, quoteId, status }: { decisionR
         <p className="mt-1 text-xs text-slate-500">Use para registrar aprovação, recusa ou contexto comercial importante.</p>
       </div>
       {state.error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">{state.error}</p>}
-      {state.success && <p role="status" className="mt-4 rounded-lg bg-[#edf5ee] p-3 text-sm text-[#356451]">{state.success}</p>}
-      <button disabled={pending} className="mt-4 rounded-lg bg-[#18352d] px-5 py-3 font-semibold text-white transition hover:bg-[#23483d] active:scale-[0.99] disabled:opacity-60">
+      <button type="submit" disabled={pending} className="mt-4 rounded-lg bg-[#18352d] px-5 py-3 font-semibold text-white transition hover:bg-[#23483d] active:scale-[0.99] disabled:opacity-60">
         {pending ? "Atualizando..." : "Atualizar status"}
       </button>
     </form>

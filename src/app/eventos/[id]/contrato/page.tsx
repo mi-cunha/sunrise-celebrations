@@ -27,7 +27,7 @@ export default async function ContractDocumentPage({ params, searchParams }: { p
   const { id } = await params;
   const query = await searchParams;
   const { supabase, permissions } = await requireUser();
-  const canSeeContract = permissions.some((permission) => permission === "financeiro" || permission === "gerencia" || permission === "admin_owner");
+  const canSeeContract = permissions.some((permission) => permission === "financeiro" || permission === "gerencia" || permission === "direcao" || permission === "admin_owner");
   if (!canSeeContract) redirect("/painel?error=forbidden");
 
   const requestedVersion = Number(query.versao);

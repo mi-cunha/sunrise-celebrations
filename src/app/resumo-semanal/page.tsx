@@ -41,7 +41,7 @@ export default async function WeeklySummaryPage() {
   if (!hasSupabaseConfig()) return <SetupNotice />;
 
   const { supabase, permissions } = await requireUser();
-  const canSeeFinancial = permissions.some((permission) => permission === "financeiro" || permission === "gerencia" || permission === "admin_owner");
+  const canSeeFinancial = permissions.some((permission) => permission === "financeiro" || permission === "gerencia" || permission === "direcao" || permission === "admin_owner");
   const { start, end } = currentWeekRange();
   const today = todayKey();
 

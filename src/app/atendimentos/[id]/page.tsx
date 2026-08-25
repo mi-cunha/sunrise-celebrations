@@ -16,6 +16,7 @@ import { QuoteModal } from "./quote-modal";
 
 type ConversationDetail = {
   id: string;
+  channel: string;
   status: string;
   ai_paused: boolean;
   needs_human: boolean;
@@ -88,7 +89,7 @@ export default async function ConversationDetailPage({ params, searchParams }: {
 
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
-    .select("id,status,ai_paused,needs_human,assigned_to,assignee:profiles!conversations_assigned_to_fkey(display_name),leads(id,name,company,phone,source,status,event_type,desired_date,guest_count,notes,lead_history(id,action,metadata,created_at,profiles(display_name)),quotes(id,title,status,total_amount_cents,created_at))")
+    .select("id,channel,status,ai_paused,needs_human,assigned_to,assignee:profiles!conversations_assigned_to_fkey(display_name),leads(id,name,company,phone,source,status,event_type,desired_date,guest_count,notes,lead_history(id,action,metadata,created_at,profiles(display_name)),quotes(id,title,status,total_amount_cents,created_at))")
     .eq("id", id)
     .maybeSingle();
 
@@ -159,6 +160,7 @@ export default async function ConversationDetailPage({ params, searchParams }: {
             <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">
               Responsável: {detail.assignee?.display_name ?? "não assumido"}
             </span>
+            <span className="rounded-full bg-[#dcecf6] px-3 py-1 text-sm text-[#083653]">{detail.channel === "whatsapp_cloud" ? "WhatsApp oficial" : "Simulação"}</span>
           </div>
 
           <ol className="mt-6 max-h-[620px] space-y-4 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50/40 p-3 pr-2">
@@ -170,7 +172,7 @@ export default async function ConversationDetailPage({ params, searchParams }: {
           {canManage && (
             <div className="mt-6 grid gap-4 xl:grid-cols-2">
               <HumanReplyForm conversationId={id} disabled={isClosed} templates={responseTemplates ?? []} />
-              <CustomerMessageForm conversationId={id} disabled={isClosed} />
+              {detail.channel !== "whatsapp_cloud" && <CustomerMessageForm conversationId={id} disabled={isClosed} />}
             </div>
           )}
         </section>

@@ -38,8 +38,8 @@ export default async function EventsPage() {
   if (!hasSupabaseConfig()) return <SetupNotice />;
 
   const { supabase, permissions } = await requireUser();
-  const canCreateEvents = permissions.some((permission) => permission === "atendimento" || permission === "gerencia" || permission === "admin_owner");
-  const canSeeFinancial = permissions.some((permission) => permission === "financeiro" || permission === "gerencia" || permission === "admin_owner");
+  const canCreateEvents = permissions.some((permission) => permission === "atendimento" || permission === "gerencia" || permission === "direcao" || permission === "admin_owner");
+  const canSeeFinancial = permissions.some((permission) => permission === "financeiro" || permission === "gerencia" || permission === "direcao" || permission === "admin_owner");
   const { data: events, error } = await supabase
     .from("contracted_events")
     .select("id,title,status,event_type,event_date,guest_count,created_at,leads(id,name,phone),quotes(id,total_amount_cents),contracted_event_checklist(id,is_done),contracted_event_contracts(id,status),contracted_event_payments(id,status,amount_cents,due_date)")

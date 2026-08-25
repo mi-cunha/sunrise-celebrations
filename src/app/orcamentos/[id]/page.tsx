@@ -112,11 +112,12 @@ type ContractedEventSummary = {
   status: string;
 };
 
-export default async function QuotePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function QuotePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ statusError?: string; statusUpdated?: string }> }) {
   if (!hasSupabaseConfig()) return <SetupNotice />;
   const { id } = await params;
+  const statusFeedback = await searchParams;
   const { supabase, permissions } = await requireUser();
-  const canManageQuotes = permissions.some((permission) => permission === "atendimento" || permission === "financeiro" || permission === "admin_owner");
+  const canManageQuotes = permissions.some((permission) => permission === "atendimento" || permission === "financeiro" || permission === "gerencia" || permission === "direcao" || permission === "admin_owner");
   const isAdminOwner = permissions.includes("admin_owner");
 
   const { data: quote, error } = await supabase
@@ -170,6 +171,13 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
         )}
       </div>
 
+      {statusFeedback.statusError && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">{statusFeedback.statusError}</p>}
+      {statusFeedback.statusUpdated && (
+        <p role="status" className="mt-3 rounded-lg bg-[#edf5ee] p-3 text-sm text-[#356451]">
+          {statusFeedback.statusUpdated === "aprovado" ? "Orçamento aprovado e evento incluído na agenda." : "Status do orçamento atualizado."}
+        </p>
+      )}
+
       <FlowProgress steps={quoteFlowSteps({ status: detail.status, hasItems: items.length > 0 || Boolean(selectedPackage), hasEvent: Boolean(contractedEvent) })} />
 
       <NextStepCard
@@ -211,7 +219,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
                   </div>
                   <div>
                     <dt className="text-sm text-slate-500">Data</dt>
-                    <dd>{detail.desired_date ?? "Não informada"}</dd>
+                    <dd>{detail.desired_date ? formatDate(detail.desired_date) : "Não informada"}</dd>
                   </div>
                   <div>
                     <dt className="text-sm text-slate-500">Convidados</dt>
@@ -331,6 +339,11 @@ function DecisionInfo({ label, value }: { label: string; value: string }) {
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+}
+
+function formatDate(value: string) {
+  const [year, month, day] = value.split("-");
+  return year && month && day ? `${day}/${month}/${year}` : value;
 }
 
 function historyText(entry: QuoteHistory) {
