@@ -71,8 +71,15 @@ async function receiveMessage(message: WhatsAppInboundText) {
   await supabase.from("conversations").update({ updated_at: new Date().toISOString() }).eq("id", conversation.id);
   if (createdConversation && !conversation.ai_paused && conversation.status === "ia_triagem") {
     const reply = "Olá! Sou a assistente virtual da Sunrise Celebrations. Vou coletar algumas informações iniciais para que nossa equipe possa preparar seu atendimento. Qual tipo de evento você está planejando?";
-    const externalId = await sendWhatsAppText({ body: reply, phoneNumberId: message.phoneNumberId, to: message.from });
-    await supabase.from("conversation_messages").insert({ conversation_id: conversation.id, author: "ia", body: reply, external_message_id: externalId, delivery_status: "sent" });
+    try {
+      const externalId = await sendWhatsAppText({ body: reply, phoneNumberId: message.phoneNumberId, to: message.from });
+      const { error: replyError } = await supabase.from("conversation_messages").insert({ conversation_id: conversation.id, author: "ia", body: reply, external_message_id: externalId, delivery_status: "sent" });
+      if (replyError) throw new Error(replyError.message);
+    } catch (error) {
+      console.warn("[whatsapp:webhook] auto_reply_failed", error instanceof Error ? error.message : "Unknown error");
+      await supabase.from("conversations").update({ status: "aguardando_humano", needs_human: true, handoff_reason: "A resposta automática do WhatsApp não pôde ser enviada." }).eq("id", conversation.id);
+      await supabase.from("conversation_messages").insert({ conversation_id: conversation.id, author: "sistema", body: "A mensagem do cliente foi recebida, mas a resposta automática não pôde ser enviada. Atendimento humano sinalizado." });
+    }
   }
   return createdConversation ? "created" as const : "appended" as const;
 }
