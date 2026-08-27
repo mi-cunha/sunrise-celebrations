@@ -15,15 +15,30 @@ export function GET(request: Request) {
 
 export async function POST(request: Request) {
   const rawBody = await request.text();
-  if (!verifyWhatsAppSignature(rawBody, request.headers.get("x-hub-signature-256"))) return new Response("Invalid signature", { status: 401 });
+  if (!verifyWhatsAppSignature(rawBody, request.headers.get("x-hub-signature-256"))) {
+    console.warn("[whatsapp:webhook] rejected_invalid_signature");
+    return new Response("Invalid signature", { status: 401 });
+  }
   try {
     const payload = parseWhatsAppWebhook(JSON.parse(rawBody));
+    console.info("[whatsapp:webhook] accepted", { messages: payload.messages.length, statuses: payload.statuses.length });
     const supabase = createAdminClient();
-    for (const status of payload.statuses) await supabase.from("conversation_messages").update({ delivery_status: status.status }).eq("external_message_id", status.messageId);
-    for (const message of payload.messages) await receiveMessage(message);
+    for (const status of payload.statuses) {
+      const { error } = await supabase.from("conversation_messages").update({ delivery_status: status.status }).eq("external_message_id", status.messageId);
+      if (error) throw new Error(`Falha ao atualizar status de entrega: ${error.message}`);
+    }
+    const outcomes = [];
+    for (const message of payload.messages) outcomes.push(await receiveMessage(message));
+    console.info("[whatsapp:webhook] completed", {
+      messages: payload.messages.length,
+      statuses: payload.statuses.length,
+      created: outcomes.filter((outcome) => outcome === "created").length,
+      appended: outcomes.filter((outcome) => outcome === "appended").length,
+      duplicates: outcomes.filter((outcome) => outcome === "duplicate").length,
+    });
     return NextResponse.json({ received: true });
   } catch (error) {
-    console.error("WhatsApp webhook processing failed", error instanceof Error ? error.message : "Unknown error");
+    console.error("[whatsapp:webhook] processing_failed", error instanceof Error ? error.message : "Unknown error");
     return NextResponse.json({ received: false }, { status: 500 });
   }
 }
@@ -33,7 +48,7 @@ async function receiveMessage(message: WhatsAppInboundText) {
   const systemUserId = process.env.WHATSAPP_SYSTEM_USER_ID;
   if (!systemUserId) throw new Error("WHATSAPP_SYSTEM_USER_ID não configurado.");
   const { data: duplicate } = await supabase.from("conversation_messages").select("id").eq("external_message_id", message.messageId).maybeSingle();
-  if (duplicate) return;
+  if (duplicate) return "duplicate" as const;
   const { data: existingLead } = await supabase.from("leads").select("id,status").eq("whatsapp_id", message.from).maybeSingle();
   let leadId = existingLead?.id;
   if (!leadId) {
@@ -59,4 +74,5 @@ async function receiveMessage(message: WhatsAppInboundText) {
     const externalId = await sendWhatsAppText({ body: reply, phoneNumberId: message.phoneNumberId, to: message.from });
     await supabase.from("conversation_messages").insert({ conversation_id: conversation.id, author: "ia", body: reply, external_message_id: externalId, delivery_status: "sent" });
   }
+  return createdConversation ? "created" as const : "appended" as const;
 }
