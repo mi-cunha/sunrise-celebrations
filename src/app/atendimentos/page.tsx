@@ -2,10 +2,8 @@ import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { SetupNotice } from "@/components/setup-notice";
 import { conversationStatusLabel, conversationStatuses } from "@/lib/domain/conversation";
-import { canManageLeads } from "@/lib/domain/lead";
 import { requireUser } from "@/lib/auth";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
-import { CreateConversationForm } from "./create-conversation-form";
 
 type Conversation = {
   id: string;
@@ -40,12 +38,12 @@ export default async function ConversationsPage({
 
   const { status } = await searchParams;
   const activeStatus = normalizeStatusFilter(status);
-  const { supabase, permissions } = await requireUser();
-  const canManage = canManageLeads(permissions);
+  const { supabase } = await requireUser();
 
   const { data, error } = await supabase
     .from("conversations")
     .select("id,status,ai_paused,needs_human,assigned_to,created_at,assignee:profiles!conversations_assigned_to_fkey(display_name),leads(name,company,phone,status)")
+    .eq("channel", "whatsapp_cloud")
     .order("created_at", { ascending: false })
     .limit(100);
 
@@ -53,14 +51,10 @@ export default async function ConversationsPage({
   const filteredConversations = conversations.filter((conversation) => matchesStatusFilter(conversation, activeStatus));
   const counts = countConversations(conversations);
 
-  const { data: leads } = canManage
-    ? await supabase.from("leads").select("id,name,company,phone").order("created_at", { ascending: false }).limit(50)
-    : { data: [] };
-
   return (
     <AppShell title="Atendimentos">
       <p className="mt-2 max-w-2xl text-slate-600">
-        Fila de conversas simuladas. Todo contato começa com IA em triagem; quando humano assume, a IA fica pausada naquela conversa.
+        Fila oficial do WhatsApp. Todo contato começa com IA em triagem; quando uma pessoa assume, a IA fica pausada naquela conversa.
       </p>
 
       {error && (
@@ -68,8 +62,6 @@ export default async function ConversationsPage({
           Não foi possível carregar os atendimentos. Confira se a migration `202608120002_conversation_triage.sql` foi aplicada. Detalhe: {error.message}
         </p>
       )}
-
-      {canManage && <CreateConversationForm leads={leads ?? []} />}
 
       <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="Precisa humano" value={counts.precisa_humano} tone="danger" />
@@ -143,7 +135,7 @@ export default async function ConversationsPage({
           <div className="p-8">
             <h2 className="font-semibold">Nenhum atendimento neste filtro.</h2>
             <p className="mt-1 text-slate-600">
-              {canManage ? "Crie uma conversa simulada ou escolha outro filtro." : "Quando a equipe iniciar atendimentos, eles aparecerão aqui."}
+              Quando uma mensagem chegar pelo WhatsApp oficial, o atendimento aparecerá aqui.
             </p>
           </div>
         )}
