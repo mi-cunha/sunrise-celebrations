@@ -29,6 +29,7 @@ export async function AppShell({ children, title }: { children: React.ReactNode;
 
           <nav className="hidden items-center gap-1 md:flex">
             <NavLink href="/painel">Painel</NavLink>
+            {canSeeCrm && <NavLink href="/atendimentos">Atendimentos</NavLink>}
             {canSeeCrm && <NavLink href="/crm">CRM</NavLink>}
             <NavLink href="/eventos">Eventos</NavLink>
             {canSeeFinancial && <NavLink href="/financeiro">Financeiro</NavLink>}
@@ -69,6 +70,7 @@ export async function AppShell({ children, title }: { children: React.ReactNode;
             </summary>
             <div className="absolute right-0 z-30 mt-2 w-72 overflow-hidden rounded-lg border border-[#d9ded8] bg-[#fffdf8]">
               <MobileMenuLink href="/painel" label="Painel" />
+              {canSeeCrm && <MobileMenuLink href="/atendimentos" label="Atendimentos" />}
               {canSeeCrm && <MobileMenuLink href="/crm" label="CRM" />}
               <MobileMenuLink href="/eventos" label="Eventos" />
               {canSeeFinancial && <MobileMenuLink href="/financeiro" label="Financeiro" />}
