@@ -9,6 +9,7 @@ import { CompanyLogoForm, ProposalOptionForm, QuoteItemCatalogOptionForm } from 
 import { OptionAccordionList, ProposalOptionAccordionList, QuoteItemCatalogAccordionList } from "./catalog-accordions";
 import { EventPackageAccordionList, EventPackageForm } from "./package-forms";
 import { PackageModelPanel, type PackageLibraryItem, type PackageRule, type PackageSubcategory } from "./package-model-forms";
+import { WhatsAppConnectionPanel } from "./whatsapp-connection";
 
 type Option = { id: string; kind: "event_type" | "lead_source"; name: string; is_active: boolean };
 type ProposalOption = { id: string; title: string; content: string; is_active: boolean };
@@ -42,6 +43,18 @@ type EventPackageOption = {
   event_type: string;
   event_types: string[] | null;
   name: string;
+};
+
+type WhatsAppConnection = {
+  id: string;
+  waba_id: string | null;
+  phone_number_id: string | null;
+  display_phone_number: string | null;
+  status: string;
+  business_app_state: string | null;
+  history_sync_status: string;
+  history_sync_progress: number | null;
+  connected_at: string | null;
 };
 
 export default async function OptionsAdminPage() {
@@ -88,6 +101,12 @@ export default async function OptionsAdminPage() {
     .select("id,package_id,subcategory_id,title,selection_min,selection_max,is_required,event_package_catalog(id,name,event_type,event_types),event_package_subcategories(id,category,name),event_package_rule_items(id,event_package_item_catalog(id,name))")
     .order("sort_order")
     .order("created_at");
+  const { data: whatsappConnection } = await supabase
+    .from("whatsapp_connections")
+    .select("id,waba_id,phone_number_id,display_phone_number,status,business_app_state,history_sync_status,history_sync_progress,connected_at")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   const eventTypes = ((options ?? []) as Option[]).filter((option) => option.kind === "event_type");
   const leadSources = ((options ?? []) as Option[]).filter((option) => option.kind === "lead_source");
@@ -99,6 +118,15 @@ export default async function OptionsAdminPage() {
       {error && <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-[#b54747]">Tabela de opções indisponível. Confira as migrations.</p>}
 
       <div className="mt-4 space-y-2">
+        <AdminSection id="whatsapp" title="WhatsApp Business" count={whatsappConnection?.status === "connected" ? 1 : 0}>
+          <WhatsAppConnectionPanel
+            appId={process.env.NEXT_PUBLIC_META_APP_ID ?? ""}
+            configId={process.env.NEXT_PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID ?? ""}
+            connection={(whatsappConnection as WhatsAppConnection | null) ?? null}
+            graphVersion={process.env.WHATSAPP_GRAPH_API_VERSION ?? ""}
+          />
+        </AdminSection>
+
         <AdminSection id="opcoes" title="Tipos de evento" count={eventTypes.length}>
           <OptionForm kind="event_type" label="Novo tipo" />
           <OptionAccordionList options={eventTypes} />

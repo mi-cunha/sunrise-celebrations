@@ -44,6 +44,7 @@ export async function AppShell({ children, title }: { children: React.ReactNode;
                 Configurações
               </summary>
               <div className="absolute right-0 z-20 mt-1 w-60 overflow-hidden rounded-lg border border-[#d9ded8] bg-[#fffdf8]">
+                <ConfigLink href="/admin/opcoes#whatsapp" label="WhatsApp" description="Conexão e sincronização." />
                 <ConfigLink href="/admin/opcoes#opcoes" label="Opções" description="Tipos, origens e textos." />
                 <ConfigLink href="/admin/opcoes#pacotes" label="Pacotes" description="Buffet e itens inclusos." />
                 <ConfigLink href="/ajuda#fornecedores" label="Fornecedores" description="Uso por evento." />
@@ -80,6 +81,7 @@ export async function AppShell({ children, title }: { children: React.ReactNode;
               <div className="border-t border-[#d9ded8] bg-[#f7f4ed] px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#5f7180]">
                 Configurações
               </div>
+              <MobileMenuLink href="/admin/opcoes#whatsapp" label="WhatsApp" />
               <MobileMenuLink href="/admin/opcoes#opcoes" label="Opções" />
               <MobileMenuLink href="/admin/opcoes#pacotes" label="Pacotes" />
               <MobileMenuLink href="/ajuda#fornecedores" label="Fornecedores" />
