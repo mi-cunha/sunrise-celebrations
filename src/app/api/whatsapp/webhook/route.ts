@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { parseWhatsAppWebhook, sendWhatsAppText, verifyWhatsAppSignature, type WhatsAppInboundText, type WhatsAppMessageEcho } from "@/lib/whatsapp";
+import { parseWhatsAppWebhook, sendWhatsAppText, verifyWhatsAppSignature, type WhatsAppInboundText, type WhatsAppMessageEcho, type WhatsAppSyncedContact } from "@/lib/whatsapp";
 
 export const runtime = "nodejs";
 
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
   }
   try {
     const payload = parseWhatsAppWebhook(JSON.parse(rawBody));
-    console.info("[whatsapp:webhook] accepted", { messages: payload.messages.length, statuses: payload.statuses.length, echoes: payload.echoes.length });
+    console.info("[whatsapp:webhook] accepted", { messages: payload.messages.length, statuses: payload.statuses.length, echoes: payload.echoes.length, syncedContacts: payload.syncedContacts.length });
     const supabase = createAdminClient();
     for (const status of payload.statuses) {
       const statusTime = new Date().toISOString();
@@ -33,14 +33,19 @@ export async function POST(request: Request) {
     for (const message of payload.messages) outcomes.push(await receiveMessage(message));
     const echoOutcomes = [];
     for (const echo of payload.echoes) echoOutcomes.push(await receiveEcho(echo));
+    const contactOutcomes = [];
+    for (const contact of payload.syncedContacts) contactOutcomes.push(await syncContact(contact));
     console.info("[whatsapp:webhook] completed", {
       messages: payload.messages.length,
       statuses: payload.statuses.length,
       echoes: payload.echoes.length,
+      syncedContacts: payload.syncedContacts.length,
       created: outcomes.filter((outcome) => outcome === "created").length,
       appended: outcomes.filter((outcome) => outcome === "appended").length,
       duplicates: [...outcomes, ...echoOutcomes].filter((outcome) => outcome === "duplicate").length,
       mirrored: echoOutcomes.filter((outcome) => outcome === "mirrored").length,
+      contactsUpserted: contactOutcomes.filter((outcome) => outcome === "upserted").length,
+      contactsRemoved: contactOutcomes.filter((outcome) => outcome === "removed").length,
     });
     return NextResponse.json({ received: true });
   } catch (error) {
@@ -108,7 +113,7 @@ async function receiveEcho(echo: WhatsAppMessageEcho) {
     leadId = lead.id;
   }
 
-  const { data: connection } = await supabase.from("whatsapp_connections").select("id").eq("phone_number_id", echo.phoneNumberId).maybeSingle();
+  const connectionId = await ensureWhatsAppConnection(echo.phoneNumberId, echo.wabaId);
   const { data: latest, error: conversationLookupError } = await supabase.from("conversations").select("id,status").eq("channel", "whatsapp_cloud").eq("external_contact_id", echo.to).order("updated_at", { ascending: false }).limit(1).maybeSingle();
   if (conversationLookupError) throw new Error(conversationLookupError.message);
 
@@ -122,7 +127,7 @@ async function receiveEcho(echo: WhatsAppMessageEcho) {
       needs_human: false,
       external_contact_id: echo.to,
       external_phone_number_id: echo.phoneNumberId,
-      whatsapp_connection_id: connection?.id ?? null,
+      whatsapp_connection_id: connectionId,
       created_by: systemUserId,
     }).select("id").single();
     if (error || !created) throw new Error(error?.message ?? "Não foi possível criar o atendimento iniciado no WhatsApp Business.");
@@ -133,7 +138,7 @@ async function receiveEcho(echo: WhatsAppMessageEcho) {
       ai_paused: true,
       needs_human: false,
       external_phone_number_id: echo.phoneNumberId,
-      whatsapp_connection_id: connection?.id ?? null,
+      whatsapp_connection_id: connectionId,
       updated_at: new Date().toISOString(),
     }).eq("id", conversationId);
     if (error) throw new Error(error.message);
@@ -158,4 +163,52 @@ async function receiveEcho(echo: WhatsAppMessageEcho) {
   });
   if (messageError) throw new Error(messageError.message);
   return "mirrored" as const;
+}
+
+async function syncContact(contact: WhatsAppSyncedContact) {
+  const supabase = createAdminClient();
+  const connectionId = await ensureWhatsAppConnection(contact.phoneNumberId, contact.wabaId);
+  const action = contact.action.toLowerCase();
+
+  if (action.includes("delete") || action.includes("remove")) {
+    const { error } = await supabase.from("whatsapp_contacts").delete().eq("phone_number_id", contact.phoneNumberId).eq("whatsapp_id", contact.whatsappId);
+    if (error) throw new Error(`Falha ao remover contato sincronizado: ${error.message}`);
+    return "removed" as const;
+  }
+
+  const syncedAt = contact.timestamp && /^\d+$/.test(contact.timestamp)
+    ? new Date(Number(contact.timestamp) * 1000).toISOString()
+    : new Date().toISOString();
+  const { error } = await supabase.from("whatsapp_contacts").upsert({
+    whatsapp_connection_id: connectionId,
+    phone_number_id: contact.phoneNumberId,
+    whatsapp_id: contact.whatsappId,
+    full_name: contact.fullName ?? null,
+    first_name: contact.firstName ?? null,
+    sync_action: contact.action,
+    last_synced_at: syncedAt,
+  }, { onConflict: "phone_number_id,whatsapp_id" });
+  if (error) throw new Error(`Falha ao salvar contato sincronizado: ${error.message}`);
+
+  if (contact.fullName) {
+    const { error: leadError } = await supabase.from("leads").update({ name: contact.fullName }).eq("whatsapp_id", contact.whatsappId).eq("name", "Contato WhatsApp");
+    if (leadError) throw new Error(`Falha ao identificar contato comercial: ${leadError.message}`);
+  }
+  return "upserted" as const;
+}
+
+async function ensureWhatsAppConnection(phoneNumberId: string, wabaId?: string) {
+  const supabase = createAdminClient();
+  const now = new Date().toISOString();
+  const { data: existing, error: lookupError } = await supabase.from("whatsapp_connections").select("id").eq("phone_number_id", phoneNumberId).maybeSingle();
+  if (lookupError) throw new Error(`Falha ao localizar conexão do WhatsApp: ${lookupError.message}`);
+  if (existing) {
+    const connectionUpdate = wabaId ? { waba_id: wabaId, status: "connected", last_webhook_at: now } : { status: "connected", last_webhook_at: now };
+    const { error } = await supabase.from("whatsapp_connections").update(connectionUpdate).eq("id", existing.id);
+    if (error) throw new Error(`Falha ao atualizar conexão do WhatsApp: ${error.message}`);
+    return existing.id;
+  }
+  const { data: created, error } = await supabase.from("whatsapp_connections").insert({ waba_id: wabaId ?? null, phone_number_id: phoneNumberId, mode: "coexistence", status: "connected", last_webhook_at: now, connected_at: now }).select("id").single();
+  if (error || !created) throw new Error(error?.message ?? "Falha ao registrar conexão do WhatsApp.");
+  return created.id;
 }

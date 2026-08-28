@@ -67,4 +67,31 @@ describe("WhatsApp webhook", () => {
 
     expect(result.echoes[0]).toMatchObject({ body: "Áudio enviado pelo WhatsApp Business", messageType: "audio", mediaId: "media-1", mediaMimeType: "audio/ogg" });
   });
+
+  it("extrai contatos sincronizados sem transformá-los em mensagens", () => {
+    const result = parseWhatsAppWebhook({
+      object: "whatsapp_business_account",
+      entry: [{ id: "waba-123", changes: [{ field: "smb_app_state_sync", value: {
+        metadata: { phone_number_id: "phone-123" },
+        state_sync: [{
+          type: "contact",
+          contact: { full_name: "Maria da Silva", first_name: "Maria", phone_number: "+55 (85) 99999-9999" },
+          action: "upsert",
+          metadata: { timestamp: "1787680000" },
+        }],
+      } }] }],
+    });
+
+    expect(result.syncedContacts).toEqual([{
+      whatsappId: "5585999999999",
+      fullName: "Maria da Silva",
+      firstName: "Maria",
+      action: "upsert",
+      timestamp: "1787680000",
+      phoneNumberId: "phone-123",
+      wabaId: "waba-123",
+    }]);
+    expect(result.messages).toHaveLength(0);
+    expect(result.echoes).toHaveLength(0);
+  });
 });

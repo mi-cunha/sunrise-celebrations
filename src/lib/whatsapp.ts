@@ -17,6 +17,16 @@ const messageEchoSchema = z.object({
   video: z.object({ id: z.string().optional(), mime_type: z.string().optional(), caption: z.string().max(4000).optional() }).optional(),
   document: z.object({ id: z.string().optional(), mime_type: z.string().optional(), filename: z.string().optional(), caption: z.string().max(4000).optional() }).optional(),
 }).passthrough();
+const stateSyncContactSchema = z.object({
+  type: z.literal("contact"),
+  contact: z.object({
+    full_name: z.string().trim().max(200).optional(),
+    first_name: z.string().trim().max(100).optional(),
+    phone_number: z.string().min(5),
+  }),
+  action: z.string().min(1).max(50),
+  metadata: z.object({ timestamp: z.string() }).optional(),
+}).passthrough();
 const webhookSchema = z.object({
   object: z.literal("whatsapp_business_account"),
   entry: z.array(z.object({ id: z.string().optional(), changes: z.array(z.object({ field: z.string().optional(), value: z.object({
@@ -24,6 +34,7 @@ const webhookSchema = z.object({
     contacts: z.array(z.object({ profile: z.object({ name: z.string().optional() }).optional(), wa_id: z.string() })).optional(),
     messages: z.array(z.unknown()).optional(),
     message_echoes: z.array(z.unknown()).optional(),
+    state_sync: z.array(z.unknown()).optional(),
     statuses: z.array(z.object({ id: z.string(), status: z.string() })).optional(),
   }).passthrough() }).passthrough()) }).passthrough()),
 });
@@ -32,6 +43,7 @@ export type WhatsAppInboundText = { messageId: string; from: string; contactName
 export type WhatsAppStatusUpdate = { messageId: string; status: string };
 export type WhatsAppMessageType = "text" | "image" | "audio" | "video" | "document" | "location" | "contacts" | "sticker" | "template" | "interactive" | "system" | "unsupported";
 export type WhatsAppMessageEcho = { messageId: string; to: string; body: string; timestamp: string; phoneNumberId: string; wabaId?: string; messageType: WhatsAppMessageType; mediaId?: string; mediaMimeType?: string; mediaFilename?: string };
+export type WhatsAppSyncedContact = { whatsappId: string; fullName?: string; firstName?: string; action: string; timestamp?: string; phoneNumberId: string; wabaId?: string };
 
 export function verifyWhatsAppSignature(rawBody: string, signature: string | null) {
   const secret = process.env.WHATSAPP_APP_SECRET;
@@ -47,6 +59,7 @@ export function parseWhatsAppWebhook(input: unknown) {
   const messages: WhatsAppInboundText[] = [];
   const statuses: WhatsAppStatusUpdate[] = [];
   const echoes: WhatsAppMessageEcho[] = [];
+  const syncedContacts: WhatsAppSyncedContact[] = [];
   for (const entry of parsed.entry) for (const change of entry.changes) {
     const contactById = new Map((change.value.contacts ?? []).map((contact) => [contact.wa_id, contact.profile?.name]));
     for (const raw of change.value.messages ?? []) {
@@ -72,8 +85,25 @@ export function parseWhatsAppWebhook(input: unknown) {
         mediaFilename: echo.data.document?.filename,
       });
     }
+    if (change.field === "smb_app_state_sync") for (const raw of change.value.state_sync ?? []) {
+      const syncedContact = stateSyncContactSchema.safeParse(raw);
+      if (!syncedContact.success) continue;
+      syncedContacts.push({
+        whatsappId: normalizeWhatsAppId(syncedContact.data.contact.phone_number),
+        fullName: syncedContact.data.contact.full_name || undefined,
+        firstName: syncedContact.data.contact.first_name || undefined,
+        action: syncedContact.data.action,
+        timestamp: syncedContact.data.metadata?.timestamp,
+        phoneNumberId: change.value.metadata.phone_number_id,
+        wabaId: entry.id,
+      });
+    }
   }
-  return { messages, statuses, echoes };
+  return { messages, statuses, echoes, syncedContacts };
+}
+
+function normalizeWhatsAppId(value: string) {
+  return value.replace(/\D/g, "");
 }
 
 function normalizeMessageType(type: string): WhatsAppMessageType {
