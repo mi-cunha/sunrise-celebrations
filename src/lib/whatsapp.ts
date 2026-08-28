@@ -27,6 +27,21 @@ const stateSyncContactSchema = z.object({
   action: z.string().min(1).max(50),
   metadata: z.object({ timestamp: z.string() }).optional(),
 }).passthrough();
+const historyMessageSchema = messageEchoSchema.extend({
+  history_context: z.object({ status: z.string().optional() }).optional(),
+});
+const historyChunkSchema = z.object({
+  metadata: z.object({
+    phase: z.number().int().min(0).optional(),
+    chunk_order: z.number().int().min(0).optional(),
+    progress: z.number().int().min(0).max(100).optional(),
+  }).optional(),
+  threads: z.array(z.object({
+    id: z.string().min(5),
+    messages: z.array(z.unknown()).optional(),
+  })).optional(),
+  errors: z.array(z.object({ code: z.number().optional(), title: z.string().optional(), message: z.string().optional() }).passthrough()).optional(),
+}).passthrough();
 const webhookSchema = z.object({
   object: z.literal("whatsapp_business_account"),
   entry: z.array(z.object({ id: z.string().optional(), changes: z.array(z.object({ field: z.string().optional(), value: z.object({
@@ -35,6 +50,7 @@ const webhookSchema = z.object({
     messages: z.array(z.unknown()).optional(),
     message_echoes: z.array(z.unknown()).optional(),
     state_sync: z.array(z.unknown()).optional(),
+    history: z.array(z.unknown()).optional(),
     statuses: z.array(z.object({ id: z.string(), status: z.string() })).optional(),
   }).passthrough() }).passthrough()) }).passthrough()),
 });
@@ -44,6 +60,8 @@ export type WhatsAppStatusUpdate = { messageId: string; status: string };
 export type WhatsAppMessageType = "text" | "image" | "audio" | "video" | "document" | "location" | "contacts" | "sticker" | "template" | "interactive" | "system" | "unsupported";
 export type WhatsAppMessageEcho = { messageId: string; to: string; body: string; timestamp: string; phoneNumberId: string; wabaId?: string; messageType: WhatsAppMessageType; mediaId?: string; mediaMimeType?: string; mediaFilename?: string };
 export type WhatsAppSyncedContact = { whatsappId: string; fullName?: string; firstName?: string; action: string; timestamp?: string; phoneNumberId: string; wabaId?: string };
+export type WhatsAppHistoryMessage = WhatsAppMessageEcho & { contactWhatsAppId: string; direction: "inbound" | "outbound"; deliveryStatus?: string };
+export type WhatsAppHistoryChunk = { phoneNumberId: string; wabaId?: string; phase?: number; chunkOrder?: number; progress?: number; declined: boolean; errorMessage?: string; messages: WhatsAppHistoryMessage[] };
 
 export function verifyWhatsAppSignature(rawBody: string, signature: string | null) {
   const secret = process.env.WHATSAPP_APP_SECRET;
@@ -60,6 +78,7 @@ export function parseWhatsAppWebhook(input: unknown) {
   const statuses: WhatsAppStatusUpdate[] = [];
   const echoes: WhatsAppMessageEcho[] = [];
   const syncedContacts: WhatsAppSyncedContact[] = [];
+  const historyChunks: WhatsAppHistoryChunk[] = [];
   for (const entry of parsed.entry) for (const change of entry.changes) {
     const contactById = new Map((change.value.contacts ?? []).map((contact) => [contact.wa_id, contact.profile?.name]));
     for (const raw of change.value.messages ?? []) {
@@ -98,8 +117,45 @@ export function parseWhatsAppWebhook(input: unknown) {
         wabaId: entry.id,
       });
     }
+    if (change.field === "history") for (const raw of change.value.history ?? []) {
+      const chunk = historyChunkSchema.safeParse(raw);
+      if (!chunk.success) continue;
+      const historyMessages: WhatsAppHistoryMessage[] = [];
+      for (const thread of chunk.data.threads ?? []) for (const rawMessage of thread.messages ?? []) {
+        const message = historyMessageSchema.safeParse(rawMessage);
+        if (!message.success) continue;
+        const media = message.data.image ?? message.data.audio ?? message.data.video ?? message.data.document;
+        const messageType = normalizeMessageType(message.data.type);
+        historyMessages.push({
+          messageId: message.data.id,
+          to: message.data.to,
+          contactWhatsAppId: normalizeWhatsAppId(thread.id),
+          direction: normalizeWhatsAppId(message.data.from) === normalizeWhatsAppId(thread.id) ? "inbound" : "outbound",
+          body: messageBody(messageType, message.data.text?.body ?? message.data.image?.caption ?? message.data.video?.caption ?? message.data.document?.caption),
+          timestamp: message.data.timestamp,
+          phoneNumberId: change.value.metadata.phone_number_id,
+          wabaId: entry.id,
+          messageType,
+          mediaId: media?.id,
+          mediaMimeType: media?.mime_type,
+          mediaFilename: message.data.document?.filename,
+          deliveryStatus: message.data.history_context?.status,
+        });
+      }
+      const firstError = chunk.data.errors?.[0];
+      historyChunks.push({
+        phoneNumberId: change.value.metadata.phone_number_id,
+        wabaId: entry.id,
+        phase: chunk.data.metadata?.phase,
+        chunkOrder: chunk.data.metadata?.chunk_order,
+        progress: chunk.data.metadata?.progress,
+        declined: Boolean(firstError),
+        errorMessage: firstError?.message ?? firstError?.title,
+        messages: historyMessages,
+      });
+    }
   }
-  return { messages, statuses, echoes, syncedContacts };
+  return { messages, statuses, echoes, syncedContacts, historyChunks };
 }
 
 function normalizeWhatsAppId(value: string) {

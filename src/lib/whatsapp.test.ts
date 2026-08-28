@@ -94,4 +94,38 @@ describe("WhatsApp webhook", () => {
     expect(result.messages).toHaveLength(0);
     expect(result.echoes).toHaveLength(0);
   });
+
+  it("extrai o histórico preservando direção, status e progresso", () => {
+    const result = parseWhatsAppWebhook({
+      object: "whatsapp_business_account",
+      entry: [{ id: "waba-123", changes: [{ field: "history", value: {
+        metadata: { phone_number_id: "phone-123" },
+        history: [{
+          metadata: { phase: 1, chunk_order: 2, progress: 55 },
+          threads: [{ id: "5585999999999", messages: [
+            { from: "5585999999999", to: "5585999990000", id: "wamid.inbound", timestamp: "1787680000", type: "text", text: { body: "Olá" }, history_context: { status: "read" } },
+            { from: "5585999990000", to: "5585999999999", id: "wamid.outbound", timestamp: "1787680100", type: "text", text: { body: "Como podemos ajudar?" }, history_context: { status: "delivered" } },
+          ] }],
+        }],
+      } }] }],
+    });
+
+    expect(result.historyChunks[0]).toMatchObject({ phoneNumberId: "phone-123", wabaId: "waba-123", phase: 1, chunkOrder: 2, progress: 55, declined: false });
+    expect(result.historyChunks[0].messages).toEqual([
+      expect.objectContaining({ messageId: "wamid.inbound", contactWhatsAppId: "5585999999999", direction: "inbound", body: "Olá", deliveryStatus: "read" }),
+      expect.objectContaining({ messageId: "wamid.outbound", contactWhatsAppId: "5585999999999", direction: "outbound", body: "Como podemos ajudar?", deliveryStatus: "delivered" }),
+    ]);
+  });
+
+  it("identifica quando o compartilhamento do histórico foi recusado", () => {
+    const result = parseWhatsAppWebhook({
+      object: "whatsapp_business_account",
+      entry: [{ changes: [{ field: "history", value: {
+        metadata: { phone_number_id: "phone-123" },
+        history: [{ errors: [{ code: 2593109, title: "History sync is turned off", message: "History sharing is turned off by the business" }] }],
+      } }] }],
+    });
+
+    expect(result.historyChunks[0]).toMatchObject({ declined: true, errorMessage: "History sharing is turned off by the business", messages: [] });
+  });
 });

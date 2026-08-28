@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { parseWhatsAppWebhook, sendWhatsAppText, verifyWhatsAppSignature, type WhatsAppInboundText, type WhatsAppMessageEcho, type WhatsAppSyncedContact } from "@/lib/whatsapp";
+import { parseWhatsAppWebhook, sendWhatsAppText, verifyWhatsAppSignature, type WhatsAppHistoryChunk, type WhatsAppInboundText, type WhatsAppMessageEcho, type WhatsAppSyncedContact } from "@/lib/whatsapp";
 
 export const runtime = "nodejs";
 
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
   }
   try {
     const payload = parseWhatsAppWebhook(JSON.parse(rawBody));
-    console.info("[whatsapp:webhook] accepted", { messages: payload.messages.length, statuses: payload.statuses.length, echoes: payload.echoes.length, syncedContacts: payload.syncedContacts.length });
+    console.info("[whatsapp:webhook] accepted", { messages: payload.messages.length, statuses: payload.statuses.length, echoes: payload.echoes.length, syncedContacts: payload.syncedContacts.length, historyChunks: payload.historyChunks.length });
     const supabase = createAdminClient();
     for (const status of payload.statuses) {
       const statusTime = new Date().toISOString();
@@ -35,11 +35,15 @@ export async function POST(request: Request) {
     for (const echo of payload.echoes) echoOutcomes.push(await receiveEcho(echo));
     const contactOutcomes = [];
     for (const contact of payload.syncedContacts) contactOutcomes.push(await syncContact(contact));
+    let importedHistoryMessages = 0;
+    for (const chunk of payload.historyChunks) importedHistoryMessages += await syncHistoryChunk(chunk);
     console.info("[whatsapp:webhook] completed", {
       messages: payload.messages.length,
       statuses: payload.statuses.length,
       echoes: payload.echoes.length,
       syncedContacts: payload.syncedContacts.length,
+      historyChunks: payload.historyChunks.length,
+      importedHistoryMessages,
       created: outcomes.filter((outcome) => outcome === "created").length,
       appended: outcomes.filter((outcome) => outcome === "appended").length,
       duplicates: [...outcomes, ...echoOutcomes].filter((outcome) => outcome === "duplicate").length,
@@ -211,4 +215,53 @@ async function ensureWhatsAppConnection(phoneNumberId: string, wabaId?: string) 
   const { data: created, error } = await supabase.from("whatsapp_connections").insert({ waba_id: wabaId ?? null, phone_number_id: phoneNumberId, mode: "coexistence", status: "connected", last_webhook_at: now, connected_at: now }).select("id").single();
   if (error || !created) throw new Error(error?.message ?? "Falha ao registrar conexão do WhatsApp.");
   return created.id;
+}
+
+async function syncHistoryChunk(chunk: WhatsAppHistoryChunk) {
+  const supabase = createAdminClient();
+  const connectionId = await ensureWhatsAppConnection(chunk.phoneNumberId, chunk.wabaId);
+  const now = new Date().toISOString();
+
+  if (chunk.declined) {
+    const { error } = await supabase.from("whatsapp_connections").update({
+      history_sync_status: "declined",
+      last_history_sync_at: now,
+      metadata: { history_error: chunk.errorMessage ?? "Compartilhamento de histórico desativado no WhatsApp Business." },
+    }).eq("id", connectionId);
+    if (error) throw new Error(`Falha ao registrar recusa do histórico: ${error.message}`);
+    return 0;
+  }
+
+  const rows = chunk.messages.flatMap((message) => {
+    const timestamp = Number(message.timestamp);
+    if (!Number.isFinite(timestamp)) return [];
+    return [{
+      whatsapp_connection_id: connectionId,
+      phone_number_id: chunk.phoneNumberId,
+      contact_whatsapp_id: message.contactWhatsAppId,
+      external_message_id: message.messageId,
+      direction: message.direction,
+      body: message.body,
+      message_type: message.messageType,
+      delivery_status: message.deliveryStatus ?? null,
+      media_id: message.mediaId ?? null,
+      media_mime_type: message.mediaMimeType ?? null,
+      media_filename: message.mediaFilename ?? null,
+      external_created_at: new Date(timestamp * 1000).toISOString(),
+    }];
+  });
+  if (rows.length) {
+    const { error } = await supabase.from("whatsapp_history_messages").upsert(rows, { onConflict: "external_message_id", ignoreDuplicates: true });
+    if (error) throw new Error(`Falha ao importar histórico do WhatsApp: ${error.message}`);
+  }
+
+  const completed = chunk.progress === 100;
+  const { error: progressError } = await supabase.from("whatsapp_connections").update({
+    history_sync_status: completed ? "completed" : "in_progress",
+    history_sync_phase: chunk.phase ?? null,
+    history_sync_progress: chunk.progress ?? null,
+    last_history_sync_at: now,
+  }).eq("id", connectionId);
+  if (progressError) throw new Error(`Falha ao atualizar progresso do histórico: ${progressError.message}`);
+  return rows.length;
 }

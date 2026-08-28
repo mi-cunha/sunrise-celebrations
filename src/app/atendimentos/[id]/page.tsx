@@ -21,6 +21,8 @@ type ConversationDetail = {
   ai_paused: boolean;
   needs_human: boolean;
   assigned_to: string | null;
+  external_contact_id: string | null;
+  external_phone_number_id: string | null;
   assignee: { display_name: string | null } | null;
   leads: {
     id: string;
@@ -52,6 +54,14 @@ type Message = {
   body: string;
   created_at: string;
   profiles: { display_name: string | null } | null;
+  isHistory?: boolean;
+};
+
+type HistoryMessage = {
+  id: string;
+  direction: "inbound" | "outbound";
+  body: string;
+  external_created_at: string;
 };
 
 type StaffRow = {
@@ -89,7 +99,7 @@ export default async function ConversationDetailPage({ params, searchParams }: {
 
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
-    .select("id,channel,status,ai_paused,needs_human,assigned_to,assignee:profiles!conversations_assigned_to_fkey(display_name),leads(id,name,company,phone,source,status,event_type,desired_date,guest_count,notes,lead_history(id,action,metadata,created_at,profiles(display_name)),quotes(id,title,status,total_amount_cents,created_at))")
+    .select("id,channel,status,ai_paused,needs_human,assigned_to,external_contact_id,external_phone_number_id,assignee:profiles!conversations_assigned_to_fkey(display_name),leads(id,name,company,phone,source,status,event_type,desired_date,guest_count,notes,lead_history(id,action,metadata,created_at,profiles(display_name)),quotes(id,title,status,total_amount_cents,created_at))")
     .eq("id", id)
     .maybeSingle();
 
@@ -126,7 +136,24 @@ export default async function ConversationDetailPage({ params, searchParams }: {
     .select("id,author,body,created_at,profiles(display_name)")
     .eq("conversation_id", id)
     .order("created_at", { ascending: true });
-  const messageRows = (messages ?? []) as unknown as Message[];
+  const { data: historyMessages, error: historyError } = detail.external_contact_id && detail.external_phone_number_id
+    ? await supabase
+      .from("whatsapp_history_messages")
+      .select("id,direction,body,external_created_at")
+      .eq("phone_number_id", detail.external_phone_number_id)
+      .eq("contact_whatsapp_id", detail.external_contact_id)
+      .order("external_created_at", { ascending: true })
+    : { data: [], error: null };
+  const importedRows = ((historyMessages ?? []) as HistoryMessage[]).map((message): Message => ({
+    id: `history-${message.id}`,
+    author: message.direction === "inbound" ? "cliente" : "humano",
+    body: message.body,
+    created_at: message.external_created_at,
+    profiles: null,
+    isHistory: true,
+  }));
+  const messageRows = ([...importedRows, ...((messages ?? []) as unknown as Message[])])
+    .sort((left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime());
   const isClosed = detail.status === "encerrado";
   const leadHistory = [...(detail.leads?.lead_history ?? [])].sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime()).slice(0, 6);
   const leadChecklist = buildLeadChecklist(detail.leads);
@@ -142,6 +169,12 @@ export default async function ConversationDetailPage({ params, searchParams }: {
       {messagesError && (
         <p className="mt-6 rounded-lg bg-red-50 p-3 text-sm text-red-800">
           Não foi possível carregar as mensagens desta conversa. Detalhe: {messagesError.message}
+        </p>
+      )}
+
+      {historyError && (
+        <p className="mt-6 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+          As mensagens atuais foram carregadas, mas o histórico anterior do WhatsApp não pôde ser consultado.
         </p>
       )}
 
@@ -346,6 +379,7 @@ function MessageBubble({ message }: { message: Message }) {
         <div className="flex flex-wrap items-center gap-2">
           <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${config.badgeClassName}`}>{config.label}</span>
           {message.profiles?.display_name && <span className="text-xs text-slate-500">{message.profiles.display_name}</span>}
+          {message.isHistory && <span className="text-xs text-slate-500">Histórico importado</span>}
         </div>
         <p className="mt-3 whitespace-pre-wrap text-slate-800">{message.body}</p>
         <p className="mt-3 text-xs text-slate-500">
