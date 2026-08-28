@@ -18,4 +18,53 @@ describe("WhatsApp webhook", () => {
     expect(result.messages[0]).toMatchObject({ from: "5585999999999", contactName: "Noemi", body: "Olá", phoneNumberId: "12345" });
     expect(result.statuses[0]).toEqual({ messageId: "wamid.sent", status: "delivered" });
   });
+
+  it("extrai mensagens enviadas pelo aplicativo no modo coexistence", () => {
+    const result = parseWhatsAppWebhook({
+      object: "whatsapp_business_account",
+      entry: [{
+        id: "waba-123",
+        changes: [{
+          field: "smb_message_echoes",
+          value: {
+            metadata: { phone_number_id: "phone-123" },
+            message_echoes: [{
+              from: "5585999990000",
+              to: "5585999999999",
+              id: "wamid.echo",
+              timestamp: "1787680000",
+              type: "text",
+              text: { body: "Mensagem enviada pelo celular" },
+            }],
+          },
+        }],
+      }],
+    });
+
+    expect(result.echoes).toEqual([{
+      messageId: "wamid.echo",
+      to: "5585999999999",
+      body: "Mensagem enviada pelo celular",
+      timestamp: "1787680000",
+      phoneNumberId: "phone-123",
+      wabaId: "waba-123",
+      messageType: "text",
+      mediaId: undefined,
+      mediaMimeType: undefined,
+      mediaFilename: undefined,
+    }]);
+    expect(result.messages).toHaveLength(0);
+  });
+
+  it("representa mídias ecoadas sem depender de legenda", () => {
+    const result = parseWhatsAppWebhook({
+      object: "whatsapp_business_account",
+      entry: [{ changes: [{ field: "smb_message_echoes", value: {
+        metadata: { phone_number_id: "phone-123" },
+        message_echoes: [{ from: "5585999990000", to: "5585999999999", id: "wamid.audio", timestamp: "1787680000", type: "audio", audio: { id: "media-1", mime_type: "audio/ogg" } }],
+      } }] }],
+    });
+
+    expect(result.echoes[0]).toMatchObject({ body: "Áudio enviado pelo WhatsApp Business", messageType: "audio", mediaId: "media-1", mediaMimeType: "audio/ogg" });
+  });
 });
