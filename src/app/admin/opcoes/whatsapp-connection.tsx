@@ -46,7 +46,8 @@ export function WhatsAppConnectionPanel({ appId, configId, connection, graphVers
       }
       if (!payload || typeof payload !== "object") return;
       const message = payload as { type?: string; event?: string; data?: { waba_id?: string; phone_number_id?: string } };
-      if (message.type !== "WA_EMBEDDED_SIGNUP" || message.event !== "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING") return;
+      const completedEvents = ["FINISH", "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING"];
+      if (message.type !== "WA_EMBEDDED_SIGNUP" || !message.event || !completedEvents.includes(message.event)) return;
       signupData.current = { wabaId: message.data?.waba_id, phoneNumberId: message.data?.phone_number_id };
     };
     window.addEventListener("message", handleMessage);
@@ -80,7 +81,8 @@ export function WhatsAppConnectionPanel({ appId, configId, connection, graphVers
       const { wabaId, phoneNumberId } = await waitForSignupData(signupData);
       if (!code || !wabaId) {
         setConnecting(false);
-        setFeedback({ type: "error", message: "A autorização não foi concluída. Finalize todas as etapas e leia o QR Code no WhatsApp Business." });
+        const missing = !code && !wabaId ? "o código e os identificadores" : !code ? "o código de autorização" : "os identificadores do WhatsApp";
+        setFeedback({ type: "error", message: `A Meta não retornou ${missing}. Finalize todas as etapas e leia o QR Code no WhatsApp Business.` });
         return;
       }
       try {
