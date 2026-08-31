@@ -22,7 +22,14 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
-  const publicPaths = ["/login", "/login/redefinir-senha", "/api/whatsapp/webhook"];
+  const publicPaths = [
+    "/login",
+    "/login/redefinir-senha",
+    "/api/whatsapp/webhook",
+    "/politica-de-privacidade",
+    "/termos-de-uso",
+    "/exclusao-de-dados",
+  ];
   const hasRecoveryCode = request.nextUrl.searchParams.has("code");
 
   if (!user && hasRecoveryCode && pathname !== "/login/redefinir-senha") {
