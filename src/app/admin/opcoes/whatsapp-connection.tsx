@@ -76,35 +76,39 @@ export function WhatsAppConnectionPanel({ appId, configId, connection, graphVers
     setConnecting(true);
     setFeedback(null);
     signupData.current = {};
-    window.FB.login(async (response) => {
-      const code = response.authResponse?.code;
-      const { wabaId, phoneNumberId } = await waitForSignupData(signupData);
-      if (!code || !wabaId) {
-        setConnecting(false);
-        const missing = !code && !wabaId ? "o código e os identificadores" : !code ? "o código de autorização" : "os identificadores do WhatsApp";
-        setFeedback({ type: "error", message: `A Meta não retornou ${missing}. Finalize todas as etapas e leia o QR Code no WhatsApp Business.` });
-        return;
-      }
-      try {
-        const result = await fetch("/api/whatsapp/connect", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code, wabaId, phoneNumberId }),
-        });
-        const data = await result.json() as { connected?: boolean; error?: string };
-        if (!result.ok || !data.connected) throw new Error(data.error ?? "Não foi possível confirmar a conexão.");
-        setFeedback({ type: "success", message: "WhatsApp Business conectado. Atualizando os dados…" });
-        window.location.reload();
-      } catch (error) {
-        setConnecting(false);
-        setFeedback({ type: "error", message: error instanceof Error ? error.message : "Não foi possível concluir a conexão." });
-      }
+    window.FB.login((response) => {
+      void finishConnection(response);
     }, {
       config_id: configId,
       response_type: "code",
       override_default_response_type: true,
       extras: { setup: {}, featureType: "whatsapp_business_app_onboarding", sessionInfoVersion: "3" },
     });
+  }
+
+  async function finishConnection(response: FacebookLoginResponse) {
+    const code = response.authResponse?.code;
+    const { wabaId, phoneNumberId } = await waitForSignupData(signupData);
+    if (!code || !wabaId) {
+      setConnecting(false);
+      const missing = !code && !wabaId ? "o código e os identificadores" : !code ? "o código de autorização" : "os identificadores do WhatsApp";
+      setFeedback({ type: "error", message: `A Meta não retornou ${missing}. Finalize todas as etapas e leia o QR Code no WhatsApp Business.` });
+      return;
+    }
+    try {
+      const result = await fetch("/api/whatsapp/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, wabaId, phoneNumberId }),
+      });
+      const data = await result.json() as { connected?: boolean; error?: string };
+      if (!result.ok || !data.connected) throw new Error(data.error ?? "Não foi possível confirmar a conexão.");
+      setFeedback({ type: "success", message: "WhatsApp Business conectado. Atualizando os dados…" });
+      window.location.reload();
+    } catch (error) {
+      setConnecting(false);
+      setFeedback({ type: "error", message: error instanceof Error ? error.message : "Não foi possível concluir a conexão." });
+    }
   }
 
   const connected = connection?.status === "connected";
