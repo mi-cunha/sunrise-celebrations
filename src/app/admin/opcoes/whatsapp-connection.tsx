@@ -99,6 +99,7 @@ export function WhatsAppConnectionPanel({ appId, configId, connection, graphVers
       }
     }, {
       config_id: configId,
+      scope: "whatsapp_business_management,whatsapp_business_messaging",
       response_type: "code",
       override_default_response_type: true,
       extras: { setup: {}, featureType: "whatsapp_business_app_onboarding", sessionInfoVersion: "3" },
@@ -124,6 +125,12 @@ export function WhatsAppConnectionPanel({ appId, configId, connection, graphVers
 
       {!configurationReady && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">Faltam as configurações públicas do Embedded Signup na Vercel. O botão será liberado depois do próximo passo na Meta.</p>}
       {feedback && <p className={`rounded-lg p-3 text-sm ${feedback.type === "success" ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-800"}`}>{feedback.message}</p>}
+
+      {configurationReady && !connected && (
+        <p className="text-xs text-[#5f7180]">
+          Meta App ID: <span className="font-medium text-[#092f38]">{appId}</span> · Configuration ID: <span className="font-medium text-[#092f38]">{configId}</span>
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
         <button type="button" onClick={startConnection} disabled={!configurationReady || connecting || !sdkReady} className="rounded-lg bg-[#083653] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
