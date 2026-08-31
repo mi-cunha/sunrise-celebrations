@@ -10,6 +10,8 @@ import { OptionAccordionList, ProposalOptionAccordionList, QuoteItemCatalogAccor
 import { EventPackageAccordionList, EventPackageForm } from "./package-forms";
 import { PackageModelPanel, type PackageLibraryItem, type PackageRule, type PackageSubcategory } from "./package-model-forms";
 import { WhatsAppConnectionPanel } from "./whatsapp-connection";
+import { WhatsAppTemplatePanel } from "./whatsapp-template-panel";
+import { hasWhatsAppReviewConfig, listWhatsAppReviewTemplates, type WhatsAppTemplateSummary } from "@/lib/whatsapp";
 
 type Option = { id: string; kind: "event_type" | "lead_source"; name: string; is_active: boolean };
 type ProposalOption = { id: string; title: string; content: string; is_active: boolean };
@@ -107,6 +109,16 @@ export default async function OptionsAdminPage() {
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  const reviewConfigured = hasWhatsAppReviewConfig();
+  let whatsappTemplates: WhatsAppTemplateSummary[] = [];
+  let whatsappTemplateError: string | undefined;
+  if (reviewConfigured) {
+    try {
+      whatsappTemplates = await listWhatsAppReviewTemplates();
+    } catch (templateError) {
+      whatsappTemplateError = templateError instanceof Error ? templateError.message : "Não foi possível consultar os modelos do WhatsApp.";
+    }
+  }
 
   const eventTypes = ((options ?? []) as Option[]).filter((option) => option.kind === "event_type");
   const leadSources = ((options ?? []) as Option[]).filter((option) => option.kind === "lead_source");
@@ -125,6 +137,9 @@ export default async function OptionsAdminPage() {
             connection={(whatsappConnection as WhatsAppConnection | null) ?? null}
             graphVersion={process.env.WHATSAPP_GRAPH_API_VERSION ?? ""}
           />
+          <div className="mt-4 border-t border-[#d9ded8] pt-4">
+            <WhatsAppTemplatePanel configured={reviewConfigured} loadError={whatsappTemplateError} templates={whatsappTemplates} />
+          </div>
         </AdminSection>
 
         <AdminSection id="opcoes" title="Tipos de evento" count={eventTypes.length}>
