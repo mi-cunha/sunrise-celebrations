@@ -187,16 +187,21 @@ function messageBody(type: WhatsAppMessageType, caption?: string) {
 }
 
 export async function sendWhatsAppText({ body, phoneNumberId, to }: { body: string; phoneNumberId: string; to: string }) {
-  const reviewPhoneNumberId = process.env.WHATSAPP_REVIEW_PHONE_NUMBER_ID;
-  const token = reviewPhoneNumberId && phoneNumberId === reviewPhoneNumberId
-    ? process.env.WHATSAPP_REVIEW_ACCESS_TOKEN
-    : process.env.WHATSAPP_ACCESS_TOKEN;
-  const version = process.env.WHATSAPP_GRAPH_API_VERSION;
-  if (!token) throw new Error(reviewPhoneNumberId === phoneNumberId ? "Token de avaliação do WhatsApp não configurado." : "WHATSAPP_ACCESS_TOKEN não configurado.");
+  const normalizedPhoneNumberId = normalizeEnvironmentValue(phoneNumberId);
+  const reviewPhoneNumberId = normalizeEnvironmentValue(process.env.WHATSAPP_REVIEW_PHONE_NUMBER_ID);
+  const credentialSource = reviewPhoneNumberId && normalizedPhoneNumberId === reviewPhoneNumberId ? "avaliação" : "oficial";
+  const token = normalizeEnvironmentValue(
+    credentialSource === "avaliação" ? process.env.WHATSAPP_REVIEW_ACCESS_TOKEN : process.env.WHATSAPP_ACCESS_TOKEN,
+  );
+  const version = normalizeEnvironmentValue(process.env.WHATSAPP_GRAPH_API_VERSION);
+  if (!token) throw new Error(credentialSource === "avaliação" ? "Token de avaliação do WhatsApp não configurado." : "WHATSAPP_ACCESS_TOKEN não configurado.");
   if (!version || !/^v\d+\.\d+$/.test(version)) throw new Error("WHATSAPP_GRAPH_API_VERSION não configurada.");
-  const response = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ messaging_product: "whatsapp", recipient_type: "individual", to, type: "text", text: { preview_url: false, body } }) });
+  const response = await fetch(`https://graph.facebook.com/${version}/${normalizedPhoneNumberId}/messages`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ messaging_product: "whatsapp", recipient_type: "individual", to, type: "text", text: { preview_url: false, body } }) });
   const result = await response.json() as { messages?: { id: string }[]; error?: { message?: string } };
-  if (!response.ok || !result.messages?.[0]?.id) throw new Error(result.error?.message ?? "A Meta recusou o envio da mensagem.");
+  if (!response.ok || !result.messages?.[0]?.id) {
+    const diagnostic = `ambiente ${credentialSource}; Phone ID …${lastFour(normalizedPhoneNumberId)}; destino …${lastFour(to)}`;
+    throw new Error(`${result.error?.message ?? "A Meta recusou o envio da mensagem."} (${diagnostic})`);
+  }
   return result.messages[0].id;
 }
 
@@ -245,9 +250,20 @@ export async function createWhatsAppReviewTemplate({ body, name }: { body: strin
 }
 
 function reviewConfiguration() {
-  const token = process.env.WHATSAPP_REVIEW_ACCESS_TOKEN;
-  const wabaId = process.env.WHATSAPP_REVIEW_WABA_ID;
-  const version = process.env.WHATSAPP_GRAPH_API_VERSION;
+  const token = normalizeEnvironmentValue(process.env.WHATSAPP_REVIEW_ACCESS_TOKEN);
+  const wabaId = normalizeEnvironmentValue(process.env.WHATSAPP_REVIEW_WABA_ID);
+  const version = normalizeEnvironmentValue(process.env.WHATSAPP_GRAPH_API_VERSION);
   if (!token || !wabaId || !version) throw new Error("Ambiente de avaliação do WhatsApp incompleto na Vercel.");
   return { token, version, wabaId };
+}
+
+function normalizeEnvironmentValue(value: string | undefined) {
+  const normalized = value?.trim();
+  if (!normalized) return undefined;
+  const wrappedInMatchingQuotes = (normalized.startsWith('"') && normalized.endsWith('"')) || (normalized.startsWith("'") && normalized.endsWith("'"));
+  return wrappedInMatchingQuotes ? normalized.slice(1, -1).trim() : normalized;
+}
+
+function lastFour(value: string | undefined) {
+  return value?.replace(/\D/g, "").slice(-4) || "ausente";
 }
