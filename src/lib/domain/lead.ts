@@ -23,6 +23,17 @@ export const leadSchema = z.object({
 });
 export type LeadInput = z.infer<typeof leadSchema>;
 
+export const followUpSchema = z.object({
+  leadId: z.string().uuid(),
+  nextAction: z.string().trim().min(2, "Descreva a próxima ação.").max(240),
+  nextActionAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe a data da próxima ação."),
+  nextActionAssigneeId: z.string().uuid("Selecione o responsável pela ação."),
+});
+
+export function isOverdueFollowUp(date: string, today: string) {
+  return date < today;
+}
+
 export function canManageLeads(userPermissions: readonly string[]) {
   return userPermissions.includes("atendimento") || userPermissions.includes("gerencia") || userPermissions.includes("direcao") || userPermissions.includes("admin_owner");
 }

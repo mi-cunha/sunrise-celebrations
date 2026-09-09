@@ -9,6 +9,7 @@ import { canManageLeads, defaultEventTypes, defaultLeadSources } from "@/lib/dom
 import { formatCurrencyFromCents, quoteStatusLabel } from "@/lib/domain/quote";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { LeadDetailEditForm } from "./lead-detail-edit-form";
+import { LeadFollowUpForm } from "./lead-follow-up-form";
 
 type Option = { kind?: string; name: string };
 
@@ -40,16 +41,17 @@ export default async function LeadDetail({
   const { id } = await params;
   const query = await searchParams;
   const errorCode = Array.isArray(query.error) ? query.error[0] : query.error;
-  const { supabase, permissions } = await requireUser();
+  const { supabase, permissions, user } = await requireUser();
   const canManage = canManageLeads(permissions);
 
-  const [{ data: lead }, { data: options }] = await Promise.all([
+  const [{ data: lead }, { data: options }, { data: people }] = await Promise.all([
     supabase
       .from("leads")
       .select("*,potential_events(*),lead_history(*, profiles(display_name)),quotes(id,title,status,total_amount_cents,created_at,contracted_events(id,status))")
       .eq("id", id)
       .single(),
     supabase.from("option_catalog").select("kind,name").eq("is_active", true).order("sort_order").order("name"),
+    canManage ? supabase.rpc("get_active_operational_profiles") : Promise.resolve({ data: [] }),
   ]);
 
   if (!lead) notFound();
@@ -130,6 +132,7 @@ export default async function LeadDetail({
           </section>
 
           {canManage && <LeadDetailEditForm lead={lead} eventTypes={safeEventTypes} leadSources={safeLeadSources} />}
+          {canManage && <LeadFollowUpForm lead={lead} people={(people ?? []) as { id: string; display_name: string | null }[]} currentUserId={user.id} />}
 
           <section className="overflow-hidden rounded-lg border border-[#dbe3dc] bg-white">
             <div className="border-b border-[#edf1ee] p-4">

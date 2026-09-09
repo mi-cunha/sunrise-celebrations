@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireLeadManager } from "@/lib/auth";
-import { leadSchema } from "@/lib/domain/lead";
+import { followUpSchema, leadSchema } from "@/lib/domain/lead";
 
 export type LeadDetailUpdateValues = Record<"leadId" | "name" | "company" | "phone" | "source" | "eventType" | "desiredDate" | "guestCount" | "notes", string>;
 export type LeadDetailUpdateState = {
@@ -11,6 +11,14 @@ export type LeadDetailUpdateState = {
   success?: string;
   fieldErrors?: Record<string, string[]>;
   values?: LeadDetailUpdateValues;
+  version?: number;
+};
+
+export type LeadFollowUpState = {
+  error?: string;
+  success?: string;
+  fieldErrors?: Record<string, string[]>;
+  values?: Record<"nextAction" | "nextActionAt" | "nextActionAssigneeId", string>;
   version?: number;
 };
 
@@ -51,6 +59,52 @@ export async function updateLeadFromDetail(_: LeadDetailUpdateState, formData: F
   return { success: "Lead atualizado.", version: Date.now() };
 }
 
+export async function saveLeadFollowUp(_: LeadFollowUpState, formData: FormData): Promise<LeadFollowUpState> {
+  const raw = {
+    leadId: String(formData.get("leadId") ?? ""),
+    nextAction: String(formData.get("nextAction") ?? ""),
+    nextActionAt: String(formData.get("nextActionAt") ?? ""),
+    nextActionAssigneeId: String(formData.get("nextActionAssigneeId") ?? ""),
+  };
+  const parsed = followUpSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      error: "Revise os dados da próxima ação.",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+      values: { nextAction: raw.nextAction, nextActionAt: raw.nextActionAt, nextActionAssigneeId: raw.nextActionAssigneeId },
+      version: Date.now(),
+    };
+  }
+
+  const { supabase } = await requireLeadManager();
+  const { error } = await supabase.rpc("schedule_lead_follow_up", {
+    p_lead_id: parsed.data.leadId,
+    p_next_action: parsed.data.nextAction,
+    p_next_action_at: parsed.data.nextActionAt,
+    p_next_action_assignee_id: parsed.data.nextActionAssigneeId,
+  });
+  if (error) return { error: translateFollowUpError(error.message), values: { nextAction: raw.nextAction, nextActionAt: raw.nextActionAt, nextActionAssigneeId: raw.nextActionAssigneeId }, version: Date.now() };
+
+  revalidatePath("/crm");
+  revalidatePath("/painel");
+  revalidatePath(`/leads/${parsed.data.leadId}`);
+  return { success: "Próxima ação salva.", version: Date.now() };
+}
+
+export async function completeLeadFollowUp(_: LeadFollowUpState, formData: FormData): Promise<LeadFollowUpState> {
+  const leadId = z.string().uuid().safeParse(formData.get("leadId"));
+  if (!leadId.success) return { error: "Não foi possível identificar o lead.", version: Date.now() };
+
+  const { supabase } = await requireLeadManager();
+  const { error } = await supabase.rpc("complete_lead_follow_up", { p_lead_id: leadId.data });
+  if (error) return { error: translateFollowUpError(error.message), version: Date.now() };
+
+  revalidatePath("/crm");
+  revalidatePath("/painel");
+  revalidatePath(`/leads/${leadId.data}`);
+  return { success: "Próxima ação concluída.", version: Date.now() };
+}
+
 function leadUpdateValues(formData: FormData): LeadDetailUpdateValues {
   return {
     leadId: String(formData.get("leadId") ?? ""),
@@ -63,4 +117,12 @@ function leadUpdateValues(formData: FormData): LeadDetailUpdateValues {
     guestCount: String(formData.get("guestCount") ?? ""),
     notes: String(formData.get("notes") ?? ""),
   };
+}
+
+function translateFollowUpError(message: string) {
+  if (message.includes("permission denied")) return "Seu usuário não possui permissão para acompanhar este lead.";
+  if (message.includes("assignee is not active")) return "Selecione um responsável ativo.";
+  if (message.includes("follow up not found")) return "Não há uma próxima ação para concluir.";
+  if (message.includes("invalid follow up")) return "Informe ação, data e responsável.";
+  return "Não foi possível salvar a próxima ação.";
 }

@@ -22,6 +22,8 @@ export type ContractedEventPaymentMethod = (typeof contractedEventPaymentMethods
 
 export const contractedEventCostCategories = ["buffet", "bebidas", "equipe", "fornecedor", "decoracao", "estrutura", "transporte", "cortesia", "comissao", "outro"] as const;
 export const contractedEventCostStatuses = ["previsto", "confirmado", "pago", "cancelado"] as const;
+export const contractedEventHospitalityCategories = ["cortesia", "recepcao", "mesa", "pos_evento", "material_impresso"] as const;
+export const contractedEventHospitalityStatuses = ["planejado", "aprovado", "preparado", "concluido", "cancelado"] as const;
 
 export const contractedEventBillingModels = ["orcamento_fechado", "consumo_aberto_pos_evento", "pre_pago_com_consumo_aberto"] as const;
 export type ContractedEventBillingModel = (typeof contractedEventBillingModels)[number];
@@ -242,6 +244,20 @@ export const contractedEventCostSchema = z.object({
 export const contractedEventCostUpdateSchema = contractedEventCostSchema.extend({ costId: z.string().uuid() });
 export const contractedEventCostDeleteSchema = z.object({ eventId: z.string().uuid(), costId: z.string().uuid() });
 
+export const contractedEventHospitalityItemSchema = z.object({
+  eventId: z.string().uuid(),
+  category: z.enum(contractedEventHospitalityCategories),
+  status: z.enum(contractedEventHospitalityStatuses),
+  title: z.string().trim().min(2, "Informe o item.").max(160, "Use até 160 caracteres."),
+  description: optionalNotes,
+  moment: z.string().trim().max(120, "Use até 120 caracteres.").optional().transform((value) => value || undefined),
+  assignedTo: optionalUuid,
+  visibleToClient: z.boolean(),
+  estimatedAmount: z.string().trim().optional().transform((value) => value ? parseCurrencyToCents(value) : undefined).refine((value) => value === undefined || value >= 0, "Informe um custo válido."),
+});
+export const contractedEventHospitalityItemUpdateSchema = contractedEventHospitalityItemSchema.extend({ itemId: z.string().uuid() });
+export const contractedEventHospitalityItemDeleteSchema = z.object({ eventId: z.string().uuid(), itemId: z.string().uuid() });
+
 export const contractedEventPaymentPlanSchema = z
   .object({
     eventId: z.string().uuid(),
@@ -383,6 +399,14 @@ export function contractedEventCostCategoryLabel(category: string) {
 export function contractedEventCostStatusLabel(status: string) {
   const labels: Record<string, string> = { previsto: "Previsto", confirmado: "Confirmado", pago: "Pago", cancelado: "Cancelado" };
   return labels[status] ?? status;
+}
+
+export function contractedEventHospitalityCategoryLabel(category: string) {
+  return ({ cortesia: "Cortesia", recepcao: "Recepção", mesa: "Mesa", pos_evento: "Pós-evento", material_impresso: "Material impresso" } as Record<string, string>)[category] ?? category;
+}
+
+export function contractedEventHospitalityStatusLabel(status: string) {
+  return ({ planejado: "Planejado", aprovado: "Aprovado", preparado: "Preparado", concluido: "Concluído", cancelado: "Cancelado" } as Record<string, string>)[status] ?? status;
 }
 
 export function contractedEventPaymentMethodLabel(method: string) {

@@ -42,6 +42,7 @@ Não use `service_role` no cliente. O app usa apenas a URL pública e a chave p�
    supabase/migrations/202608130004_logo_upload_quote_item_catalog.sql
    supabase/migrations/202608130005_admin_catalog_edit_remove.sql
    supabase/migrations/202608130006_quote_decisions_edit_unlock.sql
+   supabase/migrations/202608260001_event_hospitality.sql
    ```
 
 4. Crie o perfil do primeiro usuário autenticado e associe a permissão `admin_owner`.
@@ -84,6 +85,7 @@ No Windows, se `npm run build` falhar com `EPERM` em `.next`, pare o servidor de
 - Histórico do lead.
 - Gestão básica de usuários e permissões.
 - Orçamentos com itens, catálogo editável de serviços, edição/remoção, total, status, histórico, aprovação/recusa com motivo, trava pós-aprovação com liberação admin, proposta visual para impressão/PDF, logo configurável por arquivo e condições padronizadas de proposta.
+- Hospitalidade do evento: cortesias, recepção, mesa, pós-evento e materiais simples, com responsáveis, status e custos integrados ao financeiro.
 
 ## Fontes do projeto
 

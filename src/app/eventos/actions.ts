@@ -17,6 +17,9 @@ import {
   contractedEventCostDeleteSchema,
   contractedEventCostSchema,
   contractedEventCostUpdateSchema,
+  contractedEventHospitalityItemDeleteSchema,
+  contractedEventHospitalityItemSchema,
+  contractedEventHospitalityItemUpdateSchema,
   contractedEventNotesSchema,
   contractedEventPaymentDeleteSchema,
   contractedEventPaymentKindLabel,
@@ -755,8 +758,44 @@ export async function removeContractedEventCost(_: ContractedEventFormState, for
   return { success: "Custo removido.", version: Date.now() };
 }
 
+export async function addContractedEventHospitalityItem(_: ContractedEventFormState, formData: FormData): Promise<ContractedEventFormState> {
+  const raw = hospitalityRawValues(formData);
+  const parsed = contractedEventHospitalityItemSchema.safeParse({ ...raw, visibleToClient: raw.visibleToClient === "on" });
+  if (!parsed.success) return { error: "Revise o item de hospitalidade.", fieldErrors: parsed.error.flatten().fieldErrors, values: raw, version: Date.now() };
+  const { supabase } = await requireEventManager();
+  const { error } = await supabase.rpc("add_contracted_event_hospitality_item", { p_event_id: parsed.data.eventId, p_category: parsed.data.category, p_status: parsed.data.status, p_title: parsed.data.title, p_description: parsed.data.description ?? null, p_moment: parsed.data.moment ?? null, p_assigned_to: parsed.data.assignedTo ?? null, p_visible_to_client: parsed.data.visibleToClient, p_estimated_amount_cents: parsed.data.estimatedAmount });
+  if (error) return { error: error.message, values: raw, version: Date.now() };
+  revalidatePath(`/eventos/${parsed.data.eventId}`); revalidatePath("/financeiro");
+  return { success: "Item de hospitalidade adicionado.", version: Date.now() };
+}
+
+export async function updateContractedEventHospitalityItem(_: ContractedEventFormState, formData: FormData): Promise<ContractedEventFormState> {
+  const raw = { ...hospitalityRawValues(formData), itemId: String(formData.get("itemId") ?? "") };
+  const parsed = contractedEventHospitalityItemUpdateSchema.safeParse({ ...raw, visibleToClient: raw.visibleToClient === "on" });
+  if (!parsed.success) return { error: "Revise o item de hospitalidade.", fieldErrors: parsed.error.flatten().fieldErrors, values: raw, version: Date.now() };
+  const { supabase } = await requireEventManager();
+  const { data: eventId, error } = await supabase.rpc("update_contracted_event_hospitality_item", { p_item_id: parsed.data.itemId, p_category: parsed.data.category, p_status: parsed.data.status, p_title: parsed.data.title, p_description: parsed.data.description ?? null, p_moment: parsed.data.moment ?? null, p_assigned_to: parsed.data.assignedTo ?? null, p_visible_to_client: parsed.data.visibleToClient, p_estimated_amount_cents: parsed.data.estimatedAmount });
+  if (error) return { error: error.message, values: raw, version: Date.now() };
+  revalidatePath(`/eventos/${eventId ?? parsed.data.eventId}`); revalidatePath("/financeiro");
+  return { success: "Item de hospitalidade atualizado.", version: Date.now() };
+}
+
+export async function removeContractedEventHospitalityItem(_: ContractedEventFormState, formData: FormData): Promise<ContractedEventFormState> {
+  const parsed = contractedEventHospitalityItemDeleteSchema.safeParse({ eventId: formData.get("eventId"), itemId: formData.get("itemId") });
+  if (!parsed.success) return { error: "Não foi possível identificar o item.", version: Date.now() };
+  const { supabase } = await requireEventManager();
+  const { data: eventId, error } = await supabase.rpc("remove_contracted_event_hospitality_item", { p_item_id: parsed.data.itemId });
+  if (error) return { error: error.message, version: Date.now() };
+  revalidatePath(`/eventos/${eventId ?? parsed.data.eventId}`); revalidatePath("/financeiro");
+  return { success: "Item de hospitalidade removido.", version: Date.now() };
+}
+
 function costRawValues(formData: FormData) {
   return { eventId: String(formData.get("eventId") ?? ""), category: String(formData.get("category") ?? ""), status: String(formData.get("status") ?? ""), description: String(formData.get("description") ?? ""), estimatedAmount: String(formData.get("estimatedAmount") ?? ""), actualAmount: String(formData.get("actualAmount") ?? ""), dueDate: String(formData.get("dueDate") ?? ""), notes: String(formData.get("notes") ?? "") };
+}
+
+function hospitalityRawValues(formData: FormData) {
+  return { eventId: String(formData.get("eventId") ?? ""), category: String(formData.get("category") ?? ""), status: String(formData.get("status") ?? ""), title: String(formData.get("title") ?? ""), description: String(formData.get("description") ?? ""), moment: String(formData.get("moment") ?? ""), assignedTo: String(formData.get("assignedTo") ?? ""), visibleToClient: String(formData.get("visibleToClient") ?? ""), estimatedAmount: String(formData.get("estimatedAmount") ?? "") };
 }
 
 function paymentRawValues(formData: FormData) {

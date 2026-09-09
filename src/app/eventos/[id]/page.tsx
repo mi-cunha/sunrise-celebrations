@@ -3,12 +3,13 @@ import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { FlowProgress, NextStepCard } from "@/components/flow-guidance";
 import { SetupNotice } from "@/components/setup-notice";
-import { contractedEventBillingModelLabel, contractedEventContractStatusLabel, contractedEventPaymentStatusLabel, contractedEventStatusLabel, contractedEventVendorStatusLabel } from "@/lib/domain/contracted-event";
+import { contractedEventBillingModelLabel, contractedEventContractStatusLabel, contractedEventHospitalityCategoryLabel, contractedEventPaymentStatusLabel, contractedEventStatusLabel, contractedEventVendorStatusLabel } from "@/lib/domain/contracted-event";
 import { formatCurrencyFromCents, quoteEventAreaLabel, quoteStatusLabel } from "@/lib/domain/quote";
 import { requireUser } from "@/lib/auth";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { BillingModelForm, ChecklistItemCard, ChecklistItemForm, ContractedEventNotesForm, ContractedEventStatusForm, ContractDocumentForm, OperationalBriefForm, PaymentCard, PaymentForm, PaymentPlanForm, TimelineEntryCard, TimelineEntryForm, VendorCard, VendorForm } from "./event-forms";
 import { CostCard, CostForm, type EventCost } from "./cost-forms";
+import { HospitalityCard, HospitalityForm, type HospitalityItem } from "./hospitality-forms";
 
 type ContractedEventDetail = {
   id: string;
@@ -28,6 +29,7 @@ type ContractedEventDetail = {
   contracted_event_contracts: ContractSummary[] | ContractSummary | null;
   contracted_event_payments: PaymentSummary[];
   contracted_event_costs: EventCost[];
+  contracted_event_hospitality_items: HospitalityItem[];
   contracted_event_checklist: ChecklistItem[];
   contracted_event_timeline: TimelineEntry[];
   contracted_event_vendors: Vendor[];
@@ -138,7 +140,7 @@ export default async function EventDetailPage({
 
   const { data: event, error } = await supabase
     .from("contracted_events")
-    .select("id,title,status,event_type,event_area,event_date,guest_count,billing_model,billing_notes,notes,created_at,updated_at,leads(id,name,company,phone),quotes(id,title,status,total_amount_cents),contracted_event_contracts(id,status,signed_at,notes),contracted_event_payments(id,kind,status,amount_cents,due_date,paid_at,payment_method,notes),contracted_event_costs(id,category,status,description,estimated_amount_cents,actual_amount_cents,due_date,notes),contracted_event_checklist(id,title,is_done,sort_order,completed_at,assigned_to,due_date,notes),contracted_event_timeline(id,title,start_time,end_time,location,assigned_to,notes,sort_order),contracted_event_vendors(id,category,name,contact_name,phone,email,status,notes),contracted_event_history(id,action,metadata,created_at,profiles(display_name)),contracted_event_documents(id,document_type,title,content,updated_at),contracted_event_contract_document_versions(id,version,document_kind,status,title,created_at,updated_at,reviewed_at,issued_at)")
+    .select("id,title,status,event_type,event_area,event_date,guest_count,billing_model,billing_notes,notes,created_at,updated_at,leads(id,name,company,phone),quotes(id,title,status,total_amount_cents),contracted_event_contracts(id,status,signed_at,notes),contracted_event_payments(id,kind,status,amount_cents,due_date,paid_at,payment_method,notes),contracted_event_costs(id,category,status,description,estimated_amount_cents,actual_amount_cents,due_date,notes),contracted_event_hospitality_items(id,category,status,title,description,moment,assigned_to,visible_to_client,linked_cost_id),contracted_event_checklist(id,title,is_done,sort_order,completed_at,assigned_to,due_date,notes),contracted_event_timeline(id,title,start_time,end_time,location,assigned_to,notes,sort_order),contracted_event_vendors(id,category,name,contact_name,phone,email,status,notes),contracted_event_history(id,action,metadata,created_at,profiles(display_name)),contracted_event_documents(id,document_type,title,content,updated_at),contracted_event_contract_document_versions(id,version,document_kind,status,title,created_at,updated_at,reviewed_at,issued_at)")
     .eq("id", id)
     .maybeSingle();
   const { data: profiles } = await supabase.from("profiles").select("id,display_name").eq("is_active", true).order("display_name");
@@ -165,6 +167,10 @@ export default async function EventDetailPage({
   const paidAmount = payments.filter((payment) => payment.status === "pago").reduce((total, payment) => total + payment.amount_cents, 0);
   const openAmount = payments.filter((payment) => payment.status !== "pago" && payment.status !== "cancelado").reduce((total, payment) => total + payment.amount_cents, 0);
   const costs = [...(detail.contracted_event_costs ?? [])].sort((left, right) => left.category.localeCompare(right.category, "pt-BR") || left.description.localeCompare(right.description, "pt-BR"));
+  const hospitality = [...(detail.contracted_event_hospitality_items ?? [])].sort((left, right) => left.category.localeCompare(right.category, "pt-BR") || left.title.localeCompare(right.title, "pt-BR"));
+  const hospitalityPending = hospitality.filter((item) => !["concluido", "cancelado"].includes(item.status)).length;
+  const hospitalityPrepared = hospitality.filter((item) => item.status === "preparado").length;
+  const hospitalityDone = hospitality.filter((item) => item.status === "concluido").length;
   const totalCosts = costs.filter((cost) => cost.status !== "cancelado").reduce((total, cost) => total + (cost.actual_amount_cents ?? cost.estimated_amount_cents), 0);
   const approvedRevenue = detail.quotes?.total_amount_cents ?? 0;
   const estimatedMargin = approvedRevenue - totalCosts;
@@ -308,6 +314,12 @@ export default async function EventDetailPage({
               </div>
             </section>
           )}
+
+          <section className="rounded-lg border border-[#dbe3dc] bg-white p-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#0f5f8f]">Experiência do convidado</p><h2 className="mt-1 text-xl font-semibold text-[#18352d]">Hospitalidade e materiais</h2><p className="mt-1 text-sm text-slate-600">Do acolhimento ao pós-evento, com custos protegidos no financeiro.</p></div><div className="grid grid-cols-3 gap-2 text-center text-sm"><HospitalityMetric label="Em andamento" value={hospitalityPending} tone="gold" /><HospitalityMetric label="Preparados" value={hospitalityPrepared} tone="blue" /><HospitalityMetric label="Concluídos" value={hospitalityDone} tone="green" /></div></div>
+            {hospitality.length ? <HospitalityBoard items={hospitality} eventId={detail.id} assignees={assignees} canManageFinancials={canManageFinancials} /> : <p className="mt-4 rounded-xl bg-[#fbf8f1] p-4 text-sm text-slate-600">Comece por um modelo para estruturar a experiência do cliente.</p>}
+            {canManageEvents && <HospitalityForm eventId={detail.id} assignees={assignees} canManageFinancials={canManageFinancials} />}
+          </section>
 
           <section className="rounded-lg border border-[#dbe3dc] bg-white p-4">
             <div>
@@ -466,6 +478,19 @@ function DocumentCard({ action, href, title, updatedAt }: { action: string; href
       </Link>
     </div>
   );
+}
+
+function HospitalityBoard({ items, eventId, assignees, canManageFinancials }: { items: HospitalityItem[]; eventId: string; assignees: Assignee[]; canManageFinancials: boolean }) {
+  const columns = ["recepcao", "mesa", "cortesia", "material_impresso", "pos_evento"];
+  return <div className="mt-5 grid gap-4 xl:grid-cols-3">{columns.filter((category) => items.some((item) => item.category === category)).map((category) => {
+    const grouped = items.filter((item) => item.category === category);
+    return <div key={category} className="rounded-xl border border-[#e3ebe5] bg-[#f8fbf8] p-3"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold text-[#18352d]">{contractedEventHospitalityCategoryLabel(category)}</h3><span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-[#356451]">{grouped.length}</span></div><div className="mt-3 space-y-3">{grouped.map((item) => <HospitalityCard key={item.id} eventId={eventId} item={item} assignees={assignees} canManageFinancials={canManageFinancials} />)}</div></div>;
+  })}</div>;
+}
+
+function HospitalityMetric({ label, value, tone }: { label: string; value: number; tone: "blue" | "green" | "gold" }) {
+  const colors = { blue: "border-[#cce3ef] bg-[#eef8fd] text-[#0f5f8f]", green: "border-[#cde0d3] bg-[#f1f8f2] text-[#356451]", gold: "border-[#ecd8ad] bg-[#fff9eb] text-[#9a6715]" };
+  return <div className={`rounded-lg border px-3 py-2 ${colors[tone]}`}><p className="text-lg font-bold leading-none">{value}</p><p className="mt-1 text-[11px] font-medium">{label}</p></div>;
 }
 
 function contractDocumentVersionStatusLabel(status: string) {

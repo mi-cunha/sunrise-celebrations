@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { SetupNotice } from "@/components/setup-notice";
 import { requireUser } from "@/lib/auth";
 import { formatCurrencyFromCents } from "@/lib/domain/quote";
+import { isOverdueFollowUp } from "@/lib/domain/lead";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 
 type CrmRow = {
@@ -17,6 +18,9 @@ type CrmRow = {
   guest_count: number | null;
   status: string;
   responsible_name: string | null;
+  next_action: string | null;
+  next_action_at: string | null;
+  next_action_assignee_name: string | null;
   updated_at: string;
   quote_count: number;
   latest_quote_id: string | null;
@@ -32,7 +36,7 @@ const stages = [
   { id: "encerrados", label: "Encerrados", statuses: ["ganho", "perdido"] },
 ] as const;
 
-export default async function CrmPage({ searchParams }: { searchParams: Promise<{ busca?: string; status?: string }> }) {
+export default async function CrmPage({ searchParams }: { searchParams: Promise<{ busca?: string; status?: string; followup?: string }> }) {
   if (!hasSupabaseConfig()) return <SetupNotice />;
   const query = await searchParams;
   const { supabase, permissions } = await requireUser();
@@ -40,16 +44,20 @@ export default async function CrmPage({ searchParams }: { searchParams: Promise<
 
   const { data, error } = await supabase.rpc("get_crm_pipeline");
   const rows = (data ?? []) as unknown as CrmRow[];
+  const today = brazilToday();
   const search = query.busca?.trim().toLocaleLowerCase("pt-BR") ?? "";
   const filtered = rows.filter((row) => {
     const matchesSearch = !search || [row.name, row.company, row.phone, row.event_type, row.source, row.responsible_name].some((value) => value?.toLocaleLowerCase("pt-BR").includes(search));
     const matchesStatus = !query.status || query.status === "todos" || row.status === query.status;
-    return matchesSearch && matchesStatus;
+    const isOverdue = Boolean(row.next_action_at && isOverdueFollowUp(row.next_action_at, today));
+    const matchesFollowUp = !query.followup || query.followup === "todos" || (query.followup === "vencidos" && isOverdue) || (query.followup === "agendados" && Boolean(row.next_action_at) && !isOverdue) || (query.followup === "sem_acao" && !row.next_action_at);
+    return matchesSearch && matchesStatus && matchesFollowUp;
   });
   const active = rows.filter((row) => !["ganho", "perdido"].includes(row.status)).length;
   const closed = rows.filter((row) => row.status === "ganho").length;
   const lost = rows.filter((row) => row.status === "perdido").length;
   const conversion = closed + lost ? Math.round((closed / (closed + lost)) * 100) : 0;
+  const overdue = rows.filter((row) => Boolean(row.next_action_at && isOverdueFollowUp(row.next_action_at, today))).length;
 
   return (
     <AppShell title="CRM">
@@ -60,17 +68,27 @@ export default async function CrmPage({ searchParams }: { searchParams: Promise<
 
       {error && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">Não foi possível carregar o CRM: {translateCrmError(error.message)}</p>}
 
-      <section className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
         <Metric label="Contatos ativos" value={String(active)} />
         <Metric label="Propostas enviadas" value={String(rows.filter((row) => row.status === "proposta_enviada").length)} />
         <Metric label="Eventos fechados" value={String(closed)} />
         <Metric label="Conversão" value={`${conversion}%`} />
+        <Metric label="Follow-ups vencidos" value={String(overdue)} />
       </section>
 
-      <form className="mt-4 grid gap-2 rounded-lg border border-[#d9ded8] bg-[#fffdf8] p-3 sm:grid-cols-[1fr_220px_auto]">
+      <form className="mt-4 grid gap-2 rounded-lg border border-[#d9ded8] bg-[#fffdf8] p-3 sm:grid-cols-[1fr_190px_190px_auto]">
         <div>
           <label htmlFor="crm-search">Buscar contato</label>
           <input id="crm-search" name="busca" defaultValue={query.busca ?? ""} placeholder="Nome, empresa, telefone, evento ou responsável" />
+        </div>
+        <div>
+          <label htmlFor="crm-follow-up">Acompanhamento</label>
+          <select id="crm-follow-up" name="followup" defaultValue={query.followup ?? "todos"}>
+            <option value="todos">Todos</option>
+            <option value="vencidos">Follow-up vencido</option>
+            <option value="agendados">Próxima ação agendada</option>
+            <option value="sem_acao">Sem próxima ação</option>
+          </select>
         </div>
         <div>
           <label htmlFor="crm-status">Status</label>
@@ -117,7 +135,9 @@ function ContactCard({ contact }: { contact: CrmRow }) {
         <Info label="Evento" value={contact.event_type ?? "Não informado"} />
         <Info label="Data" value={contact.desired_date ? formatDate(contact.desired_date) : "Sem data"} />
         <Info label="Responsável" value={contact.responsible_name ?? "Não atribuído"} />
+        <Info label="Próxima ação" value={contact.next_action_at ? `${formatDate(contact.next_action_at)} · ${contact.next_action_assignee_name ?? "Sem responsável"}` : "Não definida"} />
       </dl>
+      {contact.next_action && <p className={`mt-3 rounded-md px-2 py-1 text-xs font-medium ${isOverdueFollowUp(contact.next_action_at ?? "9999-12-31", brazilToday()) ? "bg-red-50 text-red-800" : "bg-[#edf5ee] text-[#356451]"}`}>{contact.next_action}</p>}
       {contact.latest_quote_id && <p className="mt-3 border-t border-[#edf1ee] pt-2 text-xs font-semibold text-[#0f5f8f]">{contact.latest_quote_status ? statusLabel(contact.latest_quote_status) : "Orçamento"} · {formatCurrencyFromCents(contact.latest_quote_total_cents ?? 0)}</p>}
     </Link>
   );
@@ -126,5 +146,10 @@ function ContactCard({ contact }: { contact: CrmRow }) {
 function Metric({ label, value }: { label: string; value: string }) { return <div className="rounded-lg border border-[#d9ded8] bg-[#fffdf8] px-3 py-2"><p className="text-xs font-semibold uppercase tracking-[0.06em] text-[#5f7180]">{label}</p><p className="mt-1 text-2xl font-semibold text-[#083653]">{value}</p></div>; }
 function Info({ label, value }: { label: string; value: string }) { return <div className="flex justify-between gap-2"><dt className="text-[#5f7180]">{label}</dt><dd className="truncate text-right font-medium text-[#092f38]">{value}</dd></div>; }
 function formatDate(value: string) { const [year, month, day] = value.split("-"); return year && month && day ? `${day}/${month}/${year}` : value; }
+function brazilToday() {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
 function statusLabel(status: string) { return ({ novo: "Novo", em_atendimento: "Em atendimento", qualificado: "Qualificado", orcamento_em_elaboracao: "Orçamento", proposta_enviada: "Proposta enviada", negociacao: "Negociação", ganho: "Evento fechado", perdido: "Não avançou", rascunho: "Rascunho", em_elaboracao: "Em elaboração", enviado: "Enviado", aprovado: "Aprovado", recusado: "Recusado" } as Record<string, string>)[status] ?? status.replaceAll("_", " "); }
 function translateCrmError(message: string) { return message.includes("permission denied") ? "Seu usuário não possui permissão comercial." : message.includes("get_crm_pipeline") ? "Aplique a migration do CRM no Supabase." : message; }
