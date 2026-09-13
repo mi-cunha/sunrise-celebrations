@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { whatsappSdkOptions, whatsappSignupOptions } from "@/lib/whatsapp-sdk";
 
 type Connection = {
   id: string;
@@ -16,7 +17,7 @@ type Connection = {
 
 type FacebookLoginResponse = { authResponse?: { code?: string }; status?: string };
 type FacebookSdk = {
-  init(options: { appId: string; cookie: boolean; xfbml: boolean; version: string }): void;
+  init(options: ReturnType<typeof whatsappSdkOptions>): void;
   login(callback: (response: FacebookLoginResponse) => void, options: Record<string, unknown>): void;
 };
 
@@ -61,7 +62,7 @@ export function WhatsAppConnectionPanel({ appId, configId, connection, graphVers
     };
     window.addEventListener("message", handleMessage);
     window.fbAsyncInit = () => {
-      window.FB?.init({ appId, cookie: true, xfbml: true, version: graphVersion });
+      window.FB?.init(whatsappSdkOptions(appId, graphVersion));
       setSdkReady(true);
     };
     if (window.FB) window.fbAsyncInit();
@@ -87,12 +88,7 @@ export function WhatsAppConnectionPanel({ appId, configId, connection, graphVers
     signupData.current = {};
     window.FB.login((response) => {
       void finishConnection(response);
-    }, {
-      config_id: configId,
-      response_type: "code",
-      override_default_response_type: true,
-      extras: { setup: {}, featureType: "whatsapp_business_app_onboarding", sessionInfoVersion: "3" },
-    });
+    }, whatsappSignupOptions(configId));
   }
 
   async function finishConnection(response: FacebookLoginResponse) {
