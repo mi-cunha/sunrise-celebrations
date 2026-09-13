@@ -13,6 +13,7 @@ O cadastro corporativo permanece bloqueado pelo erro Meta 2655111 (Advanced Acce
 - Migração `202609130002_whatsapp_review_operations.sql` aplicada via SQL Editor no Supabase existente. Conferência: RLS ativo, authenticated sem SELECT/INSERT; 3 conversas e 8 mensagens originais preservadas. Não reaplicar essa migração.
 - IDs do ambiente de teste configurados apenas no Preview da branch. Variáveis de Production preservadas.
 - Ativação ainda depende de token válido gerado pelo usuário no crm-sun e destinatário pessoal autorizado. Nenhum envio real executado nesta preparação.
+- Verificação: 59 testes passando, tipos/lint/build aprovados; preview com tela autenticada conferida visualmente e seis verificações HTTP de segurança aprovadas. Botões de escrita permanecem bloqueados enquanto faltarem as credenciais. A prova de entrega real e de criação do modelo ainda não foi executada.
 
 ## Configuração segura
 
