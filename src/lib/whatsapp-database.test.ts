@@ -13,6 +13,7 @@ beforeAll(async () => {
   for (const file of ["202608110001_initial_sunrise.sql", "202608120002_conversation_triage.sql", "202608250007_whatsapp_cloud.sql", "202608270001_whatsapp_coexistence_foundation.sql", "202608270003_whatsapp_history.sql", "202609130001_coexistence_validation.sql"]) {
     await db.exec(readFileSync(new URL(`../../supabase/migrations/${file}`, import.meta.url), "utf8"));
   }
+  await db.exec(readFileSync(new URL("../../supabase/migrations/202609130002_whatsapp_review_operations.sql", import.meta.url), "utf8"));
   await db.exec(`insert into auth.users values('${actor}'); insert into public.profiles(id) values('${actor}');
     insert into public.user_permissions values('${actor}','admin_owner');
     insert into public.whatsapp_connections(phone_number_id) values('10001'),('10002');
@@ -55,6 +56,7 @@ describe("actual WhatsApp migrations in isolated PostgreSQL", () => {
     await db.exec("set role authenticated");
     try {
       await expect(db.query("select * from public.whatsapp_connection_credentials")).rejects.toThrow(/permission denied/i);
+      await expect(db.query("select * from public.whatsapp_review_operations")).rejects.toThrow(/permission denied/i);
       await expect(ingest("wamid.forged")).rejects.toThrow(/permission denied/i);
       await expect(db.exec("update public.conversations set external_phone_number_id='fake'")).rejects.toThrow(/server managed/i);
       await expect(db.exec("insert into public.conversation_messages(conversation_id,author,body,direction,external_message_id) select id,'cliente','forged','inbound','wamid.forged' from public.conversations limit 1")).rejects.toThrow(/row-level security/i);

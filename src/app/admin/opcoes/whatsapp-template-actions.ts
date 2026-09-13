@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
-import { createWhatsAppReviewTemplate } from "@/lib/whatsapp";
+import { createWhatsAppReviewTemplate, reviewError } from "@/lib/whatsapp-review";
+import { runReviewOperation } from "@/lib/whatsapp-review-operation";
 
 const templateSchema = z.object({
   name: z.string().trim().min(3, "Informe um nome com ao menos 3 caracteres.").max(120).regex(/^[a-z0-9_]+$/, "Use apenas letras minúsculas, números e sublinhado."),
@@ -17,17 +18,21 @@ export type WhatsAppTemplateFormState = {
 };
 
 export async function createWhatsAppTemplateAction(_state: WhatsAppTemplateFormState, formData: FormData): Promise<WhatsAppTemplateFormState> {
-  const { permissions } = await requireUser();
+  const { permissions, user } = await requireUser();
   if (!permissions.includes("admin_owner")) return { error: "Apenas administradores podem gerenciar modelos do WhatsApp." };
 
   const parsed = templateSchema.safeParse({ name: formData.get("name"), body: formData.get("body") });
   if (!parsed.success) return { error: "Revise os campos indicados.", fieldErrors: parsed.error.flatten().fieldErrors };
+  const operationId = z.uuid().safeParse(formData.get("operationId"));
+  if (!operationId.success) return { error: "Atualize a página antes de criar o modelo." };
 
   try {
-    const result = await createWhatsAppReviewTemplate(parsed.data);
+    const result = await runReviewOperation(operationId.data, user.id, "template", async () => (await createWhatsAppReviewTemplate(parsed.data)).id);
+    if (result.error) return { error: result.error };
     revalidatePath("/admin/opcoes");
-    return { success: `Modelo enviado à Meta${result.status ? ` com status ${result.status}` : ""}.` };
+    revalidatePath("/admin/whatsapp-avaliacao");
+    return { success: `Modelo criado na Meta. ID: ${result.metaId}. ${result.warning ?? "O status de aprovação aparece na lista abaixo."}` };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "Não foi possível criar o modelo." };
+    return { error: reviewError(error) };
   }
 }
