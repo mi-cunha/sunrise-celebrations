@@ -5,6 +5,30 @@ import { parseWhatsAppWebhook, verifyWhatsAppSignature } from "./whatsapp";
 afterEach(() => { delete process.env.WHATSAPP_APP_SECRET; });
 
 describe("WhatsApp webhook", () => {
+  it("imports inbound history without the optional to field", () => {
+    const result = parseWhatsAppWebhook({ object: "whatsapp_business_account", entry: [{ id: "waba-123", changes: [{ field: "history", value: { metadata: { phone_number_id: "phone-123" }, history: [{ threads: [{ id: "550000000001", messages: [{ from: "550000000001", id: "wamid.no-to", timestamp: "1787680000", type: "text", text: { body: "Fixture" } }] }] }] } }] }] });
+    expect(result.historyChunks[0].messages[0]).toMatchObject({ direction: "inbound", body: "Fixture" });
+    expect(result.messages).toHaveLength(0);
+  });
+
+  it("accepts offboarding without phone metadata and preserves adjacent messages", () => {
+    const result = parseWhatsAppWebhook({ object: "whatsapp_business_account", entry: [{ id: "waba-123", changes: [
+      { field: "account_update", value: { event: "ACCOUNT_OFFBOARDED" } },
+      { field: "messages", value: { metadata: { phone_number_id: "phone-123" }, messages: [{ from: "550000000001", id: "wamid.audio-in", timestamp: "1787680000", type: "audio", audio: { id: "fixture-media" } }] } },
+    ] }] });
+    expect(result.accountUpdates).toEqual([{ wabaId: "waba-123", event: "ACCOUNT_OFFBOARDED" }]);
+    expect(result.messages[0]).toMatchObject({ messageType: "audio", mediaId: "fixture-media" });
+  });
+
+  it("does not label every history error as refusal by the customer", () => {
+    const result = parseWhatsAppWebhook({ object: "whatsapp_business_account", entry: [{ changes: [{ field: "history", value: { metadata: { phone_number_id: "phone-123" }, history: [{ errors: [{ code: 100, title: "Failure" }] }] } }] }] });
+    expect(result.historyChunks[0]).toMatchObject({ declined: false, errorCode: 100 });
+  });
+
+  it("ignores invalid timestamps without breaking the whole webhook", () => {
+    const result = parseWhatsAppWebhook({ object: "whatsapp_business_account", entry: [{ changes: [{ value: { metadata: { phone_number_id: "phone-123" }, messages: [{ from: "550000000001", id: "wamid.invalid", timestamp: "not-a-date", type: "text", text: { body: "Fixture" } }] } }] }] });
+    expect(result.messages).toHaveLength(0);
+  });
   it("valida a assinatura HMAC da Meta", () => {
     process.env.WHATSAPP_APP_SECRET = "test-secret";
     const body = '{"object":"whatsapp_business_account"}';
@@ -16,7 +40,7 @@ describe("WhatsApp webhook", () => {
   it("extrai mensagens de texto e atualizações de entrega", () => {
     const result = parseWhatsAppWebhook({ object: "whatsapp_business_account", entry: [{ changes: [{ value: { metadata: { phone_number_id: "12345" }, contacts: [{ profile: { name: "Noemi" }, wa_id: "5585999999999" }], messages: [{ from: "5585999999999", id: "wamid.message", timestamp: "1787680000", type: "text", text: { body: "Olá" } }], statuses: [{ id: "wamid.sent", status: "delivered" }] } }] }] });
     expect(result.messages[0]).toMatchObject({ from: "5585999999999", contactName: "Noemi", body: "Olá", phoneNumberId: "12345" });
-    expect(result.statuses[0]).toEqual({ messageId: "wamid.sent", status: "delivered" });
+    expect(result.statuses[0]).toEqual({ messageId: "wamid.sent", status: "delivered", phoneNumberId: "12345", timestamp: undefined });
   });
 
   it("extrai mensagens enviadas pelo aplicativo no modo coexistence", () => {

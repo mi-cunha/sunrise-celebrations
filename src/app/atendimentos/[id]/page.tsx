@@ -13,6 +13,7 @@ import { LeadQuickEditForm, LeadStatusForm } from "./lead-quick-edit";
 import { CustomerMessageForm, HumanReplyForm } from "./message-form";
 import { createQuoteFromLead } from "@/app/orcamentos/actions";
 import { QuoteModal } from "./quote-modal";
+import { ConversationRefresh } from "@/components/conversation-refresh";
 
 type ConversationDetail = {
   id: string;
@@ -55,10 +56,15 @@ type Message = {
   created_at: string;
   profiles: { display_name: string | null } | null;
   isHistory?: boolean;
+  external_message_id?: string | null;
+  external_created_at?: string | null;
+  message_origin?: string;
+  delivery_status?: string | null;
 };
 
 type HistoryMessage = {
   id: string;
+  external_message_id: string;
   direction: "inbound" | "outbound";
   body: string;
   external_created_at: string;
@@ -133,18 +139,20 @@ export default async function ConversationDetailPage({ params, searchParams }: {
   const staff = ((staffRows ?? []) as unknown as StaffRow[]).filter((row) => row.user_permissions?.some((permission) => permission.permission === "atendimento" || permission.permission === "admin_owner"));
   const { data: messages, error: messagesError } = await supabase
     .from("conversation_messages")
-    .select("id,author,body,created_at,profiles(display_name)")
+    .select("id,author,body,created_at,external_created_at,external_message_id,message_origin,delivery_status,profiles(display_name)")
     .eq("conversation_id", id)
     .order("created_at", { ascending: true });
   const { data: historyMessages, error: historyError } = detail.external_contact_id && detail.external_phone_number_id
     ? await supabase
       .from("whatsapp_history_messages")
-      .select("id,direction,body,external_created_at")
+      .select("id,external_message_id,direction,body,external_created_at")
       .eq("phone_number_id", detail.external_phone_number_id)
       .eq("contact_whatsapp_id", detail.external_contact_id)
       .order("external_created_at", { ascending: true })
     : { data: [], error: null };
-  const importedRows = ((historyMessages ?? []) as HistoryMessage[]).map((message): Message => ({
+  const liveRows = ((messages ?? []) as unknown as Message[]).map((message) => ({ ...message, created_at: message.external_created_at ?? message.created_at }));
+  const liveIds = new Set(liveRows.map((message) => message.external_message_id).filter(Boolean));
+  const importedRows = ((historyMessages ?? []) as HistoryMessage[]).filter((message) => !liveIds.has(message.external_message_id)).map((message): Message => ({
     id: `history-${message.id}`,
     author: message.direction === "inbound" ? "cliente" : "humano",
     body: message.body,
@@ -152,7 +160,7 @@ export default async function ConversationDetailPage({ params, searchParams }: {
     profiles: null,
     isHistory: true,
   }));
-  const messageRows = ([...importedRows, ...((messages ?? []) as unknown as Message[])])
+  const messageRows = ([...importedRows, ...liveRows])
     .sort((left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime());
   const isClosed = detail.status === "encerrado";
   const leadHistory = [...(detail.leads?.lead_history ?? [])].sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime()).slice(0, 6);
@@ -162,6 +170,7 @@ export default async function ConversationDetailPage({ params, searchParams }: {
 
   return (
     <AppShell title={`Atendimento · ${detail.leads?.name ?? "Lead"}`}>
+      {detail.channel === "whatsapp_cloud" && <ConversationRefresh />}
       <Link href="/atendimentos" className="text-sm font-semibold text-[#356451] underline">
         ← Voltar à fila
       </Link>
@@ -380,6 +389,8 @@ function MessageBubble({ message }: { message: Message }) {
           <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${config.badgeClassName}`}>{config.label}</span>
           {message.profiles?.display_name && <span className="text-xs text-slate-500">{message.profiles.display_name}</span>}
           {message.isHistory && <span className="text-xs text-slate-500">Histórico importado</span>}
+          {message.message_origin === "whatsapp_business_app" && <span className="text-xs text-slate-500">WhatsApp Business · celular</span>}
+          {message.delivery_status && <span className="text-xs text-slate-500">{({ pending: "Envio em andamento", unknown: "Envio sem confirmação — não reenviar", sent: "Enviada", delivered: "Entregue", read: "Lida", failed: "Falha no envio", received: "Recebida" } as Record<string, string>)[message.delivery_status] ?? message.delivery_status}</span>}
         </div>
         <p className="mt-3 whitespace-pre-wrap text-slate-800">{message.body}</p>
         <p className="mt-3 text-xs text-slate-500">

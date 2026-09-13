@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useActionState } from "react";
 import { addCustomerMessage, addHumanMessage, type ConversationFormState } from "../actions";
 
@@ -63,13 +63,18 @@ function ConversationMessageForm({
   templates?: { title: string; body: string }[];
 }) {
   const [body, setBody] = useState(state.values?.body ?? "");
+  const requestId = useRef(state.values?.requestId ?? "");
   const buttonClass =
     variant === "human"
       ? "bg-[#18352d] text-white shadow-sm hover:bg-[#23483d] hover:shadow active:bg-[#102820]"
       : "border border-[#dbe3dc] bg-white text-[#18352d] hover:border-[#b7c8bb] hover:bg-[#f6fbf7] active:bg-[#edf5ee]";
 
   return (
-    <form action={action} className="space-y-3 rounded-xl border border-[#dbe3dc] bg-white p-4">
+    <form action={(data) => {
+      requestId.current ||= crypto.randomUUID();
+      data.set("requestId", requestId.current);
+      action(data);
+    }} className="space-y-3 rounded-xl border border-[#dbe3dc] bg-white p-4">
       <input type="hidden" name="conversationId" value={conversationId} />
       <div>
         <label htmlFor={`${variant}-body`} className="font-semibold text-[#18352d]">
