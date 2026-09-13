@@ -32,7 +32,17 @@ describe("isolated Meta review demo", () => {
   });
   it("refuses a LIVE sender even when it belongs to the review WABA", async () => {
     fetchMock.mockResolvedValueOnce(response(debug)).mockResolvedValueOnce(response({ data: [{ ...phones.data[0], account_mode: "LIVE" }] }));
-    await expect(sendWhatsAppReviewMessage()).rejects.toThrow("SANDBOX"); expect(fetchMock).toHaveBeenCalledTimes(2);
+    await expect(sendWhatsAppReviewMessage()).rejects.toThrow("remetente de teste autorizado"); expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+  it("accepts only the exact Meta-provisioned test tuple when Graph labels it LIVE", async () => {
+    vi.stubEnv("NEXT_PUBLIC_META_APP_ID", "1966660290718855");
+    vi.stubEnv("WHATSAPP_REVIEW_WABA_ID", "915488050924122");
+    vi.stubEnv("WHATSAPP_REVIEW_PHONE_NUMBER_ID", "1158464910693095");
+    const knownTestPhone = { id: "1158464910693095", account_mode: "LIVE", display_phone_number: "+1 555-673-5604" };
+    fetchMock.mockResolvedValueOnce(response({ data: { ...debug.data, app_id: "1966660290718855" } })).mockResolvedValueOnce(response({ data: [knownTestPhone] })).mockResolvedValueOnce(response(templates));
+    expect((await getWhatsAppReviewStatus()).sender).toBe(knownTestPhone.display_phone_number);
+    fetchMock.mockResolvedValueOnce(response({ data: { ...debug.data, app_id: "1966660290718855" } })).mockResolvedValueOnce(response({ data: [{ ...knownTestPhone, display_phone_number: "+1 555-000-0000" }] }));
+    await expect(getWhatsAppReviewStatus()).rejects.toThrow("remetente de teste autorizado");
   });
   it("sends only approved hello_world to the server-configured recipient", async () => {
     validated(); fetchMock.mockResolvedValueOnce(response(templates)).mockResolvedValueOnce(response({ messages: [{ id: "wamid.fixture" }] }));

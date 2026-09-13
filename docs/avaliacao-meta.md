@@ -21,7 +21,13 @@ As variáveis da branch Preview são `WHATSAPP_REVIEW_ENABLED=true`, `WHATSAPP_R
 
 `scripts/configure-whatsapp-review-preview.mjs` recebe o diretório autorizado do Vercel CLI e JSON via stdin com `token` e `recipient`. Não colocar segredos nos argumentos do shell, histórico, saída de ferramentas ou documentação. Sem JSON, o script configura apenas os IDs de teste, sem ativar envios. Após configurar, redeploy e conferência explícita do alias estável são necessários.
 
-A página exige administrador ativo; ações repetem autorização no servidor e recebem proteção Origin/Host de Server Actions. Antes de cada operação, o servidor confirma app/scopes/validade da credencial e propriedade do remetente SANDBOX na WABA. Ativos corporativos são recusados. Não há `/register` nem alteração na tabela de conexões.
+A página exige administrador ativo; ações repetem autorização no servidor e recebem proteção Origin/Host de Server Actions. Antes de cada operação, o servidor confirma app/scopes/validade da credencial e propriedade do remetente de teste na WABA. Ativos corporativos são recusados. Não há `/register` nem alteração na tabela de conexões.
+
+### Ativação e divergência de metadados
+
+Após o usuário gerar a credencial e selecionar seu destinatário pessoal, token e destinatário foram configurados como segredos somente na branch Preview, com `WHATSAPP_REVIEW_ENABLED=true`. O usuário confirmou recebimento de uma mensagem enviada pelo teste da Meta; isso ainda não comprova envio pelo CRM. Não registrar o número pessoal nem o token neste documento.
+
+Consulta somente leitura no Graph API Explorer v26.0 confirmou que o número de teste oficial listado em “Etapa 1. Experimente” retorna `account_mode=LIVE`. A validação aceita SANDBOX ou a combinação exata já verificada de app `1966660290718855`, WABA `915488050924122`, Phone ID `1158464910693095` e display de teste `15556735604`. Não autoriza outros remetentes LIVE. Alterar essa exceção exige nova verificação explícita dos ativos na Meta.
 
 Envio limitado ao modelo `hello_world`, idioma `en_US`, previamente consultado como APPROVED, e exclusivamente ao destinatário configurado no servidor. O destinatário também precisa estar verificado na lista de teste da Meta. Se o modelo não existir, o envio fica bloqueado; conferir modelos disponíveis antes de adaptar o código, sem presumir aprovação.
 

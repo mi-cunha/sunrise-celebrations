@@ -31,7 +31,7 @@ export function hasWhatsAppReviewConfig() {
   try { reviewConfiguration(); return true; } catch { return false; }
 }
 
-// Every mutation rechecks the token's app/scopes and the SANDBOX phone's ownership.
+// Every mutation rechecks the token's app/scopes and the test phone's ownership.
 // No connection row is created and no corporate phone is registered or changed.
 export async function validateWhatsAppReview() {
   const config = reviewConfiguration();
@@ -46,8 +46,14 @@ export async function validateWhatsAppReview() {
   const phones = z.object({ data: z.array(z.object({ id, account_mode: z.string(), display_phone_number: z.string() })) }).parse(
     await metaRequest(`${config.wabaId}/phone_numbers?fields=id,account_mode,display_phone_number&limit=100`, config.token),
   );
-  const phone = phones.data.find(phone => phone.id === config.phoneNumberId && phone.account_mode === "SANDBOX");
-  if (!phone) throw new Error("A Meta não confirmou um remetente SANDBOX nessa conta de teste. Nenhuma mensagem foi enviada.");
+  const phone = phones.data.find(phone => phone.id === config.phoneNumberId);
+  // On 2026-09-13, Meta's "Etapa 1. Experimente" identifies this exact asset
+  // as its provisioned test number, but Graph v26.0 reports account_mode=LIVE.
+  // Pin the full app/WABA/phone/display tuple; never accept arbitrary LIVE phones.
+  const verifiedMetaTestAsset = app.appId === "1966660290718855"
+    && config.wabaId === "915488050924122" && config.phoneNumberId === "1158464910693095"
+    && phone?.display_phone_number.replace(/\D/g, "") === "15556735604";
+  if (!phone || (phone.account_mode !== "SANDBOX" && !verifiedMetaTestAsset)) throw new Error("A Meta não confirmou um remetente de teste autorizado nessa conta. Nenhuma mensagem foi enviada.");
   return { config, sender: phone.display_phone_number, tokenExpiresAt: debug.expires_at ? new Date(debug.expires_at * 1000).toISOString() : null };
 }
 
