@@ -60,4 +60,13 @@ describe("actual WhatsApp migrations in isolated PostgreSQL", () => {
       await expect(db.exec("insert into public.conversation_messages(conversation_id,author,body,direction,external_message_id) select id,'cliente','forged','inbound','wamid.forged' from public.conversations limit 1")).rejects.toThrow(/row-level security/i);
     } finally { await db.exec("reset role"); }
   });
+  it("preserves legacy production human sends and internal handoffs", async () => {
+    await db.exec("set role authenticated");
+    try {
+      await db.query("insert into public.conversation_messages(conversation_id,author,actor_id,body,external_message_id,delivery_status) select id,'humano',$1,'Legacy fixture','wamid.legacy','sent' from public.conversations limit 1", [actor]);
+      await db.exec("insert into public.conversation_messages(conversation_id,author,body) select id,'sistema','Legacy handoff' from public.conversations limit 1");
+      await db.exec("update public.conversations set status='humano_assumiu',ai_paused=true");
+      expect((await db.query("select delivery_status from public.conversation_messages where external_message_id='wamid.legacy'")).rows).toEqual([{ delivery_status: "sent" }]);
+    } finally { await db.exec("reset role"); }
+  });
 });

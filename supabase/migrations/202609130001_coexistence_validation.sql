@@ -1,4 +1,5 @@
 begin;
+set local lock_timeout = '5s';
 
 -- Real inbound messages and routing identifiers may only be created by the backend.
 create policy "real whatsapp conversations server only" on public.conversations
@@ -6,8 +7,12 @@ create policy "real whatsapp conversations server only" on public.conversations
 create policy "real whatsapp messages cannot be forged" on public.conversation_messages
   as restrictive for insert to authenticated with check (
     not exists(select 1 from public.conversations c where c.id = conversation_id and c.channel = 'whatsapp_cloud')
-    or (author in ('humano','sistema') and external_message_id is null and external_created_at is null
-      and direction = 'internal' and message_origin = 'sunrise' and delivery_status is null)
+    or (author in ('humano','sistema') and external_created_at is null
+      and direction = 'internal' and message_origin = 'sunrise'
+      and ((external_message_id is null and delivery_status is null)
+        -- Compatibility with the deployed sender: it saves the accepted wamid
+        -- using the attendant session, without direction/origin metadata.
+        or (author = 'humano' and actor_id = auth.uid() and external_message_id is not null and delivery_status = 'sent')))
   );
 create function public.protect_whatsapp_routing() returns trigger language plpgsql set search_path = '' as $$
 begin

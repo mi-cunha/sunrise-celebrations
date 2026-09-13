@@ -16,13 +16,13 @@ Verificação local em 13/09/2026: lint, TypeScript, 42 testes, build Next.js 16
 - Tentativa humana registrada antes do envio; ID estável impede repetição da mesma tentativa. Resultado incerto exige conferência, não retry automático. Janela de 24h considera apenas entrada nova pela API nesta conversa, nunca histórico ou eco.
 - Conversa atualiza a cada 5s quando visível, mostra origem/status e deduplica histórico contra mensagens atuais.
 
-## Configuração do ambiente isolado
+## Configuração com o Supabase existente (autorizada em 13/09/2026)
 
-Não aplicar esta migração no banco compartilhado com a versão antiga de produção: as novas restrições de escrita tornam o fluxo antigo de envio incompatível. Banco, migração e aplicação precisam ser implantados como um conjunto compatível.
+A migração foi adaptada e aplicada no projeto Celebrations após ensaio com rollback. Foram preservados os 3 atendimentos e 8 registros de mensagens existentes. As novas políticas aceitam o formato de resposta humana da versão antiga, mantendo bloqueadas entradas reais forjadas e alterações de roteamento pelo cliente. A exceção de compatibilidade para o envio legado só deve ser removida após encerrar o uso da versão antiga. Não reaplicar a migração: tabelas/políticas já existem no banco real.
 
-1. Disponibilizar projeto Supabase de validação separado. Não copiar contatos/histórico reais desnecessariamente. Aplicar a base do repositório em ordem e a migração `202609130001_coexistence_validation.sql`; verificar a aplicação completa em staging. Os testes automatizados exercitam as migrações relevantes a leads/conversas/WhatsApp, não todas as demais áreas do produto.
-2. Criar usuário administrador de teste e profile técnico ativo. `WHATSAPP_SYSTEM_USER_ID` é o UUID desse profile no Supabase, **não** o ID de usuário do sistema na Meta.
-3. Configurar variáveis apenas em Preview, preferencialmente específicas do branch. Usar URL/chaves do Supabase isolado. Não reutilizar a `service_role` de produção no preview.
+1. Usar o Supabase Celebrations existente, ref `mcdrfjwasuxkdaspqmuz`, conforme escolha explícita do usuário. Preview compartilha dados reais; não é descartável nem isolado. Não executar fixtures persistentes contra este banco. Os testes automatizados usam PostgreSQL em memória e exercitam as migrações relevantes a leads/conversas/WhatsApp, não todas as demais áreas do produto.
+2. Reutilizar administrador e profile técnico ativos. `WHATSAPP_SYSTEM_USER_ID` é o UUID desse profile no Supabase, **não** o ID de usuário do sistema na Meta.
+3. As seis variáveis sensíveis existentes de Supabase/Meta (URL, chave pública, service_role, App Secret, profile técnico, verify token) foram habilitadas também para Preview sem alterar valores nem disponibilidade em Production. A Vercel não permite reler seus valores; o escopo comum de Preview deve ficar restrito a código confiável deste repositório. As novas configurações são específicas do branch `validacao-coexistence`. Não habilitar deploys de forks não confiáveis com esses segredos.
 4. Configurar `NEXT_PUBLIC_META_APP_ID=1966660290718855` (`crm-sun`) e `NEXT_PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID=4473682106181135`. App Secret precisa pertencer ao **mesmo** app. Produção foi observada com App ID de outro aplicativo; não copiar essa combinação.
 5. Configurar `WHATSAPP_ALLOWED_WABA_ID=1800002930569834`, `WHATSAPP_ALLOWED_PHONE_NUMBER_ID=631897616670252`, versão Graph conforme painel, `WHATSAPP_VERIFY_TOKEN` aleatório e `WHATSAPP_CREDENTIAL_ENCRYPTION_KEY` aleatória de 32 bytes em hex. Armazenar a chave em gerenciador seguro; sua perda impede descriptografar os tokens. Não enviar segredos ao Git ou ao chat.
 6. Manter `WHATSAPP_REVIEW_ENABLED=false`. Tokens antigos de avaliação e `WHATSAPP_ACCESS_TOKEN` não são fallback para o envio oficial.
@@ -51,8 +51,10 @@ Não aplicar esta migração no banco compartilhado com a versão antiga de prod
 - Manter backup seguro da chave de criptografia; rotação requer recriptografia ou novo onboarding, nunca apenas sobrescrever a chave.
 - Um token previamente existente em Graph Explorer não foi revogado por limpar seu campo; avaliar sua revogação separadamente sem invalidar outras integrações por engano.
 
-## Bloqueio de infraestrutura observado em 13/09/2026
+## Decisão de infraestrutura e implantação
 
-O painel da organização Booster impede criar projeto gratuito adicional por limite de projetos ativos. Não houve pausa, exclusão ou upgrade. É necessária escolha do responsável para liberar uma vaga ou autorizar outra infraestrutura. CLI Vercel/Supabase está autenticada em contas diferentes das sessões web da Sunrise; não usar essas credenciais para implantar no projeto errado.
+O limite de projetos gratuitos deixou de ser bloqueio: o usuário autorizou usar o projeto existente. Não houve pausa, exclusão ou upgrade. A CLI Vercel foi autorizada como `mi-cunha` em diretório temporário próprio; o login global dos outros projetos não foi substituído. A CLI Supabase continua com outra conta: a migração foi executada na sessão web autenticada de Celebrations, não pela CLI.
+
+O script `scripts/configure-coexistence-preview.mjs` confere projeto/equipe, preserva valores existentes e não imprime segredos. A chave de criptografia foi gerada diretamente para a Vercel. Não executar de novo para tentar recuperar o valor: a variável sensível existente é preservada, nunca rotacionada implicitamente. A disponibilidade da produção não comprova ainda o teste de coexistência no preview.
 
 Fonte principal: [Meta — onboarding de usuários do WhatsApp Business App](https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/onboarding-business-app-users), consultada em 13/09/2026. Dependências de teste PostgreSQL local: [PGlite](https://pglite.dev/docs/).
