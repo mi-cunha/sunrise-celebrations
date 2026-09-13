@@ -2,7 +2,7 @@
 
 Estado: implementação no branch `validacao-coexistence`. Ainda não validada com o número real, não promovida a produção. Escopo: uma organização, uma WABA e um número. Não é uma implementação multi-tenant.
 
-Verificação local em 13/09/2026: lint, TypeScript, 42 testes, build Next.js 16.3.5 e `npm audit` aprovados (zero vulnerabilidades reportadas). Os testes não comprovam elegibilidade da Meta, entrega real, carga de histórico ou integração completa do preview.
+Verificação local em 13/09/2026: lint, TypeScript, 43 testes e build Next.js 16.3.5 aprovados; `npm audit` também aprovado na verificação anterior (zero vulnerabilidades reportadas). Os testes não comprovam elegibilidade da Meta, entrega real, carga de histórico ou integração completa do preview.
 
 ## O que mudou
 
@@ -58,3 +58,12 @@ O limite de projetos gratuitos deixou de ser bloqueio: o usuário autorizou usar
 O script `scripts/configure-coexistence-preview.mjs` confere projeto/equipe, preserva valores existentes e não imprime segredos. A chave de criptografia foi gerada diretamente para a Vercel. Não executar de novo para tentar recuperar o valor: a variável sensível existente é preservada, nunca rotacionada implicitamente. A disponibilidade da produção não comprova ainda o teste de coexistência no preview.
 
 Fonte principal: [Meta — onboarding de usuários do WhatsApp Business App](https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/onboarding-business-app-users), consultada em 13/09/2026. Dependências de teste PostgreSQL local: [PGlite](https://pglite.dev/docs/).
+
+## Evidências de implantação e pendências
+
+- Preview do commit `c3e4607` publicado e READY: `dpl_HMdBn7gpDbSUS368MDLJnGQzE45U`, URL `https://sunrise-celebrations-l9vxr03kp-booster7.vercel.app`. Alias de trabalho: `https://sunrise-celebrations-git-validacao-coexistence-booster7.vercel.app`.
+- Banco real: tabelas/funções novas persistidas; `authenticated` sem SELECT nas credenciais e sem EXECUTE em `ingest_whatsapp_message(jsonb,uuid)`. Contagens existentes preservadas: 3 conversas, 8 mensagens.
+- URLs legais de `crm-sun` salvas e confirmadas após recarregar a Meta: `/politica-de-privacidade`, `/termos-de-uso` e `/exclusao-de-dados`, todas no domínio de produção, HTTP 200.
+- `scripts/smoke-coexistence-preview.mjs`: seis verificações HTTP aprovadas no deployment acima, incluindo páginas públicas e rejeições sem sessão/assinatura, usando o bypass de automação autorizado da Vercel somente em memória. O proxy redireciona APIs privadas sem sessão para `/login` (307); isso não comprova o bloqueio CSRF de uma sessão autenticada, coberto separadamente pelos testes locais.
+- Ainda pendentes: sessão administrativa no preview, correspondência real do App Secret, domínio/OAuth de preview, callback Meta apontado ao código novo, onboarding pelo celular e mensagens reais. O callback permanece em produção; não iniciar teste real antes de ajustá-lo, pois a versão antiga pode responder automaticamente.
+- A proteção da Vercel continua ativa. Para callback de preview, a Meta precisa de acesso de automação via query parameter; nunca registrar o URL com seu segredo no Git ou em relatórios. A versão de produção do app não foi promovida.
