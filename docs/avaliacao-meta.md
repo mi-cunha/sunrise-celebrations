@@ -68,3 +68,13 @@ Revogação: desativar `META_REVIEWER_ENABLED` e republicar o preview; revogar t
 - `scripts/share-meta-reviewer-preview.mjs`: link compartilhável criado com autorização explícita, somente no alias da branch, sem reutilizar o bypass de automação ou alterar proteção global.
 - `scripts/prepare-meta-reviewer-handoff.mjs`: acesso externo pelo link aprovado sem login Vercel/Supabase, chegando à tela de senha isolada. Segredos permanecem em arquivos privados fora do repositório; validade até 14/10/2026.
 - A credencial WhatsApp de teste foi confirmada inválida/expirada no acesso autenticado. Renovação pelo usuário ainda necessária. Instruções de teste da Meta preparadas como rascunho, mas URL/credencial precisam ser transferidas de forma segura. App Review não submetido.
+
+### Renovação e conferência final — 14/09/2026
+
+- O usuário salvou o link compartilhável, as instruções e a credencial exclusiva no formulário da Meta; presença conferida sem exibir os segredos.
+- O usuário gerou e estendeu o token pelo depurador oficial. Graph v26.0 confirmou app `1966660290718855`, token USER válido, as duas permissões WhatsApp e expiração em `2026-11-12T16:43:23Z`; acesso aos dados até `2026-12-13T12:56:22Z`. O acesso de avaliação/link continua limitado a 14/10/2026.
+- Atualizada exclusivamente a variável sensível `WHATSAPP_REVIEW_ACCESS_TOKEN` da branch Preview. Não alterar o token homônimo de Production. Destinatário e demais variáveis preservados.
+- Redeploy `dpl_DGDsCjDAHkFRipjpR9DkbkRLfJcG`, commit `09f36e9`, READY. Alias estável apontado para `sunrise-celebrations-5trzhdahf-booster7.vercel.app` e link compartilhável anterior preservado.
+- Smoke autenticado aprovado com credencial Meta válida. Verificação externa usando somente link compartilhável e senha exclusiva também aprovada: login, consulta real ao remetente/modelos, botões de envio/criação habilitados, bloqueio de `/crm` e logout. Seis verificações de login/webhook/sync também aprovadas. Nenhum envio ou criação realizado durante essas verificações.
+- Consulta Graph confirmou `hello_world` aprovado e os modelos anteriores `sunrise_confirmacao_5b710cb9` e `sunrise_confirmacao_9517dd59` em `APPROVED`.
+- Revisão visual: Verificação, Configurações do app, Uso permitido e Tratamento de dados com indicadores verdes; botão Enviar para análise habilitado. Submissão final deixada para o usuário. Coexistência corporativa ainda não confirmada.
