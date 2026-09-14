@@ -6,8 +6,8 @@ import { createWhatsAppTemplateAction, type WhatsAppTemplateFormState } from "./
 
 const initialState: WhatsAppTemplateFormState = {};
 
-export function WhatsAppTemplatePanel({ configured, loadError, templates, operationId }: { configured: boolean; loadError?: string; templates: WhatsAppTemplateSummary[]; operationId: string }) {
-  const [state, action, pending] = useActionState(createWhatsAppTemplateAction, initialState);
+export function WhatsAppTemplatePanel({ configured, loadError, templates, operationId, defaultName, createAction = createWhatsAppTemplateAction }: { configured: boolean; loadError?: string; templates: WhatsAppTemplateSummary[]; operationId: string; defaultName?: string; createAction?: typeof createWhatsAppTemplateAction }) {
+  const [state, action, pending] = useActionState(createAction, initialState);
 
   return (
     <div className="space-y-4">
@@ -24,7 +24,7 @@ export function WhatsAppTemplatePanel({ configured, loadError, templates, operat
           <input type="hidden" name="operationId" value={operationId} />
           <div>
             <label htmlFor="whatsapp-template-name" className="text-sm font-semibold">Nome técnico</label>
-            <input id="whatsapp-template-name" name="name" required defaultValue={`sunrise_confirmacao_${operationId.slice(0, 8)}`} className="mt-1" />
+            <input id="whatsapp-template-name" name="name" required defaultValue={defaultName ?? `sunrise_confirmacao_${operationId.slice(0, 8)}`} className="mt-1" />
             {state.fieldErrors?.name?.[0] && <p className="mt-1 text-xs text-red-700">{state.fieldErrors.name[0]}</p>}
           </div>
           <div>

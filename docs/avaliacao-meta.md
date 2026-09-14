@@ -43,3 +43,19 @@ Cada tentativa tem UUID e reserva durável no banco antes da chamada externa. Re
 Os webhooks do número de teste não entram no CRM corporativo devido à allowlist existente. A entrega nessa demonstração é verificada no WhatsApp do destinatário; o painel não inventa recibos de entrega. O callback corporativo continua apontando para o preview autorizado anteriormente.
 
 Referência técnica: [coleção oficial da Meta — WhatsApp Cloud API](https://www.postman.com/meta/whatsapp-business-platform/documentation/wlk6lh4/whatsapp-cloud-api), que documenta consulta de remetentes SANDBOX. Instruções de vídeo verificadas diretamente no painel Tech Provider do app.
+
+## Acesso externo restrito — 14/09/2026
+
+`/avaliacao-meta` é uma entrada separada para o avaliador. Não cria usuário Supabase nem concede permissões no CRM. A página não carrega o AppShell nem consulta contatos/conversas; usa apenas as funções existentes de demonstração na WABA de teste e o registro durável de tentativas. O destinatário autorizado é fixo no servidor, não selecionável pelo avaliador.
+
+O acesso exige `VERCEL_ENV=preview`, `META_REVIEWER_ENABLED=true`, hash SHA-256 de senha aleatória de 256 bits, chave HMAC separada, prazo futuro e o ator técnico existente. O script `scripts/configure-meta-reviewer-preview.mjs` configura somente a branch `validacao-coexistence` no projeto atual e gera um arquivo temporário privado (0600) para recuperação. Nunca versionar esse arquivo nem copiar a chave de assinatura para a Meta.
+
+Sessão assinada de até uma hora, cookie Secure/HttpOnly/SameSite=Strict e path `/avaliacao-meta`. Expiração configurada ou rotação da senha invalida sessões. Cada ação revalida sessão e ticket assinado, vinculado à sessão e ao tipo da operação. Há uma tentativa por função em cada janela de hora do relógio, compartilhada entre novos logins e instâncias pela chave primária já existente. O ticket expira no fim dessa janela; recarregar a página gera o ticket atual. Falha de credencial da Meta é verificada antes de reservar a tentativa. Falhas após envio externo não geram reenvio automático.
+
+As ações administrativas continuam exigindo login e permissão de administrador. O cookie de avaliação não autentica qualquer rota do CRM. Production falha fechado, mesmo se alguém copiar variáveis de avaliação para ela. Não há alteração de RLS, migração nova, registro do número corporativo ou respostas automáticas.
+
+O acesso da Vercel é uma camada separada: usar apenas link compartilhável autorizado para o preview, não o segredo de bypass de automação do projeto/webhook. O link dispensa login Vercel, mas não dispensa a senha de avaliação nem o login normal do CRM. Não remover a proteção global do projeto. Referência: [Vercel — Shareable Links](https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/sharable-links).
+
+Antes de submeter: verificar acesso anônimo ao login, rejeição de senha incorreta, login válido, bloqueio de URLs do CRM sem sessão Supabase e token Meta válido; preencher as instruções com URL compartilhável e somente a credencial de avaliação. A demonstração usa o remetente de teste, não prova coexistência. A aprovação pela Meta permanece externa.
+
+Revogação: desativar `META_REVIEWER_ENABLED` e republicar o preview; revogar também o link compartilhável na Vercel. Sem redeploy, a configuração antiga continua no deployment existente. A expiração de 30 dias do acesso é conferida no servidor em cada requisição. Não apagar registros de tentativas ou dados do Supabase para revogar acesso.

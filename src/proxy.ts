@@ -2,6 +2,15 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function proxy(request: NextRequest) {
+  // Only this exact entry point uses the independent evaluation session.
+  // Every evaluation action revalidates it; CRM auth and RLS are unchanged.
+  if (request.nextUrl.pathname === "/avaliacao-meta") {
+    const response = NextResponse.next({ request });
+    response.headers.set("Cache-Control", "private, no-store");
+    response.headers.set("Referrer-Policy", "no-referrer");
+    response.headers.set("X-Robots-Tag", "noindex, nofollow");
+    return response;
+  }
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
