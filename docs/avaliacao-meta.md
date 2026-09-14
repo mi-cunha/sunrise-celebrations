@@ -59,3 +59,12 @@ O acesso da Vercel é uma camada separada: usar apenas link compartilhável auto
 Antes de submeter: verificar acesso anônimo ao login, rejeição de senha incorreta, login válido, bloqueio de URLs do CRM sem sessão Supabase e token Meta válido; preencher as instruções com URL compartilhável e somente a credencial de avaliação. A demonstração usa o remetente de teste, não prova coexistência. A aprovação pela Meta permanece externa.
 
 Revogação: desativar `META_REVIEWER_ENABLED` e republicar o preview; revogar também o link compartilhável na Vercel. Sem redeploy, a configuração antiga continua no deployment existente. A expiração de 30 dias do acesso é conferida no servidor em cada requisição. Não apagar registros de tentativas ou dados do Supabase para revogar acesso.
+
+### Verificação publicada
+
+- Código de acesso publicado no preview: commit `73ad75c`, deployment `dpl_DPRpc5gUeXjgSCCn6yy4iHp1nCVB`. Alias estável conferido/apontado para esse deployment. Produção não promovida.
+- 78 testes unitários/integração passando; lint, tipos e build aprovados.
+- `scripts/smoke-meta-reviewer-preview.mjs`: login anônimo, senha incorreta, rejeição de Origin externo, cookie seguro, login correto, isolamento de cinco rotas e logout aprovados no deployment real. Nenhuma mensagem enviada nem modelo criado pelo smoke.
+- `scripts/share-meta-reviewer-preview.mjs`: link compartilhável criado com autorização explícita, somente no alias da branch, sem reutilizar o bypass de automação ou alterar proteção global.
+- `scripts/prepare-meta-reviewer-handoff.mjs`: acesso externo pelo link aprovado sem login Vercel/Supabase, chegando à tela de senha isolada. Segredos permanecem em arquivos privados fora do repositório; validade até 14/10/2026.
+- A credencial WhatsApp de teste foi confirmada inválida/expirada no acesso autenticado. Renovação pelo usuário ainda necessária. Instruções de teste da Meta preparadas como rascunho, mas URL/credencial precisam ser transferidas de forma segura. App Review não submetido.
