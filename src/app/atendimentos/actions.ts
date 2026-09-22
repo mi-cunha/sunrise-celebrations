@@ -15,6 +15,9 @@ const updateLeadStatusSchema = z.object({
   leadId: z.string().uuid(),
   conversationId: z.string().uuid(),
   status: z.enum(leadStatuses),
+  lostReason: z.string().trim().max(500).optional(),
+}).superRefine((value, context) => {
+  if (value.status === "perdido" && !value.lostReason) context.addIssue({ code: "custom", path: ["lostReason"], message: "Informe o motivo da perda." });
 });
 
 const transferConversationSchema = z.object({
@@ -133,6 +136,7 @@ export async function updateLeadStatusFromConversation(_: LeadUpdateFormState, f
     leadId: formData.get("leadId"),
     conversationId: formData.get("conversationId"),
     status: formData.get("status"),
+    lostReason: formData.get("lostReason"),
   });
   if (!parsed.success) return { error: "Selecione um status válido.", version: Date.now() };
 
@@ -140,6 +144,7 @@ export async function updateLeadStatusFromConversation(_: LeadUpdateFormState, f
   const { error } = await supabase.rpc("update_lead_status_from_atendimento", {
     p_lead_id: parsed.data.leadId,
     p_status: parsed.data.status,
+    p_lost_reason: parsed.data.lostReason ?? null,
   });
   if (error) return { error: error.message, version: Date.now() };
 

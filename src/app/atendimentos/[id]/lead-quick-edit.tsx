@@ -39,6 +39,10 @@ export function LeadStatusForm({ conversationId, lead }: { conversationId: strin
           ))}
         </select>
       </div>
+      <div className="mt-3">
+        <label htmlFor="lead-lost-reason">Motivo da perda (obrigatório ao marcar perdido)</label>
+        <textarea id="lead-lost-reason" name="lostReason" rows={2} maxLength={500} placeholder="Ex.: data indisponível" />
+      </div>
       {state.error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">{state.error}</p>}
       {state.success && <p role="status" className="mt-3 rounded-lg bg-[#edf5ee] p-3 text-sm text-[#356451]">{state.success}</p>}
       <button disabled={pending} className="mt-4 rounded-lg bg-[#18352d] px-5 py-3 font-semibold text-white transition hover:bg-[#23483d] active:scale-[0.99] disabled:opacity-60">

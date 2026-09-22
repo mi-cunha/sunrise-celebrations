@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const leadStatuses = ["novo", "em_atendimento", "qualificado", "orcamento_em_elaboracao", "proposta_enviada", "negociacao", "ganho", "perdido"] as const;
+export const leadStatuses = ["novo", "em_atendimento", "qualificado", "visita_agendada", "orcamento_em_elaboracao", "proposta_enviada", "negociacao", "ganho", "perdido"] as const;
 export type LeadStatus = (typeof leadStatuses)[number];
 export const permissions = ["atendimento", "financeiro", "gerencia", "direcao", "admin_owner"] as const;
 export type Permission = (typeof permissions)[number];
@@ -18,6 +18,7 @@ export const leadSchema = z.object({
   eventType: optionalText(80),
   desiredDate: z.string().optional().transform(value => value || undefined).refine(value => !value || !Number.isNaN(Date.parse(value)), "Informe uma data válida."),
   guestCount: optionalNumber,
+  budgetRange: optionalText(120),
   notes: optionalText(2000),
   responsibleId: z.preprocess(value => value === "" ? undefined : value, z.string().uuid().optional()),
 });
@@ -28,6 +29,16 @@ export const followUpSchema = z.object({
   nextAction: z.string().trim().min(2, "Descreva a próxima ação.").max(240),
   nextActionAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe a data da próxima ação."),
   nextActionAssigneeId: z.string().uuid("Selecione o responsável pela ação."),
+});
+
+export const leadStatusChangeSchema = z.object({
+  leadId: z.string().uuid(),
+  status: z.enum(leadStatuses),
+  lostReason: optionalText(500),
+}).superRefine((value, context) => {
+  if (value.status === "perdido" && !value.lostReason) {
+    context.addIssue({ code: "custom", path: ["lostReason"], message: "Informe o motivo da perda." });
+  }
 });
 
 export function isOverdueFollowUp(date: string, today: string) {

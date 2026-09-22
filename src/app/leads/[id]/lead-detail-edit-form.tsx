@@ -18,6 +18,8 @@ type LeadEditValue = {
   event_type: string | null;
   desired_date: string | null;
   guest_count: number | null;
+  budget_range: string | null;
+  responsible_id: string | null;
   notes: string | null;
 };
 
@@ -25,10 +27,12 @@ export function LeadDetailEditForm({
   eventTypes,
   lead,
   leadSources,
+  people,
 }: {
   eventTypes: Option[];
   lead: LeadEditValue;
   leadSources: Option[];
+  people: { id: string; display_name: string | null }[];
 }) {
   const [state, action, pending] = useActionState(updateLeadFromDetail, initialState);
   const values = state.values;
@@ -91,6 +95,12 @@ export function LeadDetailEditForm({
 
         <Field label="Convidados estimados" htmlFor="lead-edit-guest-count" error={fieldErrors.guestCount?.[0]}>
           <input id="lead-edit-guest-count" name="guestCount" type="number" min="1" defaultValue={values?.guestCount ?? lead.guest_count ?? ""} className={fieldClass(fieldErrors.guestCount)} />
+        </Field>
+        <Field label="Faixa de orçamento" htmlFor="lead-edit-budget-range" error={fieldErrors.budgetRange?.[0]}>
+          <input id="lead-edit-budget-range" name="budgetRange" maxLength={120} defaultValue={values?.budgetRange ?? lead.budget_range ?? ""} className={fieldClass(fieldErrors.budgetRange)} />
+        </Field>
+        <Field label="Responsável" htmlFor="lead-edit-responsible" error={fieldErrors.responsibleId?.[0]}>
+          <select id="lead-edit-responsible" name="responsibleId" defaultValue={values?.responsibleId ?? lead.responsible_id ?? ""} className={fieldClass(fieldErrors.responsibleId)}><option value="">Não atribuído</option>{people.map((person) => <option key={person.id} value={person.id}>{person.display_name ?? "Usuário"}</option>)}</select>
         </Field>
 
         <Field label="Observações" htmlFor="lead-edit-notes" error={fieldErrors.notes?.[0]} className="md:col-span-2">

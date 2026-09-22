@@ -10,6 +10,7 @@ import { formatCurrencyFromCents, quoteStatusLabel } from "@/lib/domain/quote";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { LeadDetailEditForm } from "./lead-detail-edit-form";
 import { LeadFollowUpForm } from "./lead-follow-up-form";
+import { LeadStageForm } from "./lead-stage-form";
 
 type Option = { kind?: string; name: string };
 
@@ -22,12 +23,7 @@ type QuoteSummary = {
   contracted_events: { id: string; status: string }[] | null;
 };
 
-type LeadHistory = {
-  id: string;
-  action: string;
-  created_at: string;
-  profiles: { display_name: string | null } | null;
-};
+type TimelineEntry = { id: string; entry_type: string; title: string; body: string | null; author_name: string | null; occurred_at: string; metadata: Record<string, unknown> };
 
 export default async function LeadDetail({
   params,
@@ -44,7 +40,7 @@ export default async function LeadDetail({
   const { supabase, permissions, user } = await requireUser();
   const canManage = canManageLeads(permissions);
 
-  const [{ data: lead }, { data: options }, { data: people }] = await Promise.all([
+  const [{ data: lead }, { data: options }, { data: people }, { data: timeline }] = await Promise.all([
     supabase
       .from("leads")
       .select("*,potential_events(*),lead_history(*, profiles(display_name)),quotes(id,title,status,total_amount_cents,created_at,contracted_events(id,status))")
@@ -52,6 +48,7 @@ export default async function LeadDetail({
       .single(),
     supabase.from("option_catalog").select("kind,name").eq("is_active", true).order("sort_order").order("name"),
     canManage ? supabase.rpc("get_active_operational_profiles") : Promise.resolve({ data: [] }),
+    canManage ? supabase.rpc("get_lead_timeline", { p_lead_id: id }) : Promise.resolve({ data: [] }),
   ]);
 
   if (!lead) notFound();
@@ -60,8 +57,9 @@ export default async function LeadDetail({
   const leadSources = ((options ?? []) as Option[]).filter((option) => option.kind === "lead_source");
   const safeEventTypes = eventTypes.length ? eventTypes : defaultEventTypes.map((name) => ({ name }));
   const safeLeadSources = leadSources.length ? leadSources : defaultLeadSources.map((name) => ({ name }));
+  const activePeople = (people ?? []) as { id: string; display_name: string | null }[];
   const quotes = ([...((lead.quotes ?? []) as QuoteSummary[])]).sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime());
-  const history = ([...((lead.lead_history ?? []) as LeadHistory[])]).sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime());
+  const timelineEntries = ([...((timeline ?? []) as TimelineEntry[])]).sort((left, right) => new Date(right.occurred_at).getTime() - new Date(left.occurred_at).getTime());
   const latestQuote = quotes[0];
   const contractedEvent = quotes.flatMap((quote) => quote.contracted_events ?? [])[0];
 
@@ -116,6 +114,8 @@ export default async function LeadDetail({
                   <Info label="Evento" value={lead.event_type ?? "Não informado"} />
                   <Info label="Data desejada" value={lead.desired_date ? formatDate(lead.desired_date) : "Não informada"} />
                   <Info label="Convidados" value={lead.guest_count ? String(lead.guest_count) : "Não informado"} />
+                  <Info label="Faixa de orçamento" value={lead.budget_range ?? "Não informada"} />
+                  <Info label="Responsável" value={activePeople.find((person) => person.id === lead.responsible_id)?.display_name ?? "Não atribuído"} />
                 </dl>
               </div>
               {canManage && (
@@ -129,10 +129,11 @@ export default async function LeadDetail({
               )}
             </div>
             {lead.notes && <p className="mt-5 whitespace-pre-wrap border-t border-slate-100 pt-4 text-slate-700">{lead.notes}</p>}
+            {lead.lost_reason && <p className="mt-3 rounded-md bg-red-50 p-3 text-sm text-red-800">Motivo da perda: {lead.lost_reason}</p>}
           </section>
 
-          {canManage && <LeadDetailEditForm lead={lead} eventTypes={safeEventTypes} leadSources={safeLeadSources} />}
-          {canManage && <LeadFollowUpForm lead={lead} people={(people ?? []) as { id: string; display_name: string | null }[]} currentUserId={user.id} />}
+          {canManage && <LeadDetailEditForm lead={lead} eventTypes={safeEventTypes} leadSources={safeLeadSources} people={activePeople} />}
+          {canManage && <LeadFollowUpForm lead={lead} people={activePeople} currentUserId={user.id} />}
 
           <section className="overflow-hidden rounded-lg border border-[#dbe3dc] bg-white">
             <div className="border-b border-[#edf1ee] p-4">
@@ -163,15 +164,19 @@ export default async function LeadDetail({
           </section>
         </section>
 
-        <aside className="rounded-lg border border-[#dbe3dc] bg-white p-4">
-          <h2 className="font-semibold">Histórico</h2>
-          {history.length ? (
+        <aside className="space-y-4">
+          {canManage && <LeadStageForm leadId={lead.id} status={lead.status} />}
+          <section className="rounded-lg border border-[#dbe3dc] bg-white p-4">
+          <h2 className="font-semibold">Histórico do relacionamento</h2>
+          <p className="mt-1 text-sm text-slate-600">Mensagens, notas e alterações comerciais em ordem cronológica.</p>
+          {timelineEntries.length ? (
             <ol className="mt-4 space-y-4">
-              {history.map((entry) => (
+              {timelineEntries.map((entry) => (
                 <li key={entry.id} className="border-l-2 border-[#e8a849] pl-3">
-                  <p className="text-sm font-medium">{entry.action}</p>
+                  <p className="text-sm font-medium">{entry.title}</p>
+                  {entry.body && <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{entry.body}</p>}
                   <p className="text-xs text-slate-500">
-                    {entry.profiles?.display_name ?? "Usuário"} · {formatDateTime(entry.created_at)}
+                    {entry.author_name ?? (entry.entry_type === "message" ? "WhatsApp" : "Usuário")} · {formatDateTime(entry.occurred_at)}
                   </p>
                 </li>
               ))}
@@ -179,6 +184,7 @@ export default async function LeadDetail({
           ) : (
             <p className="mt-3 text-sm text-slate-600">Ainda não há histórico.</p>
           )}
+          </section>
         </aside>
       </div>
     </AppShell>

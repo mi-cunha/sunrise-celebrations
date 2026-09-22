@@ -3,9 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireLeadManager } from "@/lib/auth";
-import { followUpSchema, leadSchema } from "@/lib/domain/lead";
+import { followUpSchema, leadSchema, leadStatusChangeSchema } from "@/lib/domain/lead";
 
-export type LeadDetailUpdateValues = Record<"leadId" | "name" | "company" | "phone" | "source" | "eventType" | "desiredDate" | "guestCount" | "notes", string>;
+export type LeadDetailUpdateValues = Record<"leadId" | "name" | "company" | "phone" | "source" | "eventType" | "desiredDate" | "guestCount" | "budgetRange" | "responsibleId" | "notes", string>;
 export type LeadDetailUpdateState = {
   error?: string;
   success?: string;
@@ -21,13 +21,14 @@ export type LeadFollowUpState = {
   values?: Record<"nextAction" | "nextActionAt" | "nextActionAssigneeId", string>;
   version?: number;
 };
+export type LeadStatusChangeState = { error?: string; success?: string; fieldErrors?: Record<string, string[]>; version?: number };
 
 export async function updateLeadFromDetail(_: LeadDetailUpdateState, formData: FormData): Promise<LeadDetailUpdateState> {
   const raw = leadUpdateValues(formData);
   const id = z.string().uuid().safeParse(raw.leadId);
   if (!id.success) return { error: "Não foi possível identificar o lead.", values: raw, version: Date.now() };
 
-  const parsed = leadSchema.omit({ responsibleId: true }).safeParse(raw);
+  const parsed = leadSchema.safeParse(raw);
   if (!parsed.success) {
     return {
       error: "Revise os dados do lead.",
@@ -39,7 +40,7 @@ export async function updateLeadFromDetail(_: LeadDetailUpdateState, formData: F
 
   const { supabase } = await requireLeadManager();
   const input = parsed.data;
-  const { error } = await supabase.rpc("update_lead_from_atendimento", {
+  const { error } = await supabase.rpc("update_lead_crm_details", {
     p_lead_id: id.data,
     p_name: input.name,
     p_company: input.company ?? null,
@@ -49,7 +50,8 @@ export async function updateLeadFromDetail(_: LeadDetailUpdateState, formData: F
     p_desired_date: input.desiredDate ?? null,
     p_guest_count: input.guestCount ?? null,
     p_notes: input.notes ?? null,
-    p_create_event: Boolean(input.eventType || input.desiredDate || input.guestCount),
+    p_budget_range: input.budgetRange ?? null,
+    p_responsible_id: input.responsibleId ?? null,
   });
 
   if (error) return { error: error.message, values: raw, version: Date.now() };
@@ -57,6 +59,16 @@ export async function updateLeadFromDetail(_: LeadDetailUpdateState, formData: F
   revalidatePath("/painel");
   revalidatePath(`/leads/${id.data}`);
   return { success: "Lead atualizado.", version: Date.now() };
+}
+
+export async function changeLeadStatus(_: LeadStatusChangeState, formData: FormData): Promise<LeadStatusChangeState> {
+  const parsed = leadStatusChangeSchema.safeParse({ leadId: formData.get("leadId"), status: formData.get("status"), lostReason: formData.get("lostReason") });
+  if (!parsed.success) return { error: "Revise a alteração de etapa.", fieldErrors: parsed.error.flatten().fieldErrors, version: Date.now() };
+  const { supabase } = await requireLeadManager();
+  const { error } = await supabase.rpc("update_lead_status_from_atendimento", { p_lead_id: parsed.data.leadId, p_status: parsed.data.status, p_lost_reason: parsed.data.lostReason ?? null });
+  if (error) return { error: error.message.includes("lost reason") ? "Informe o motivo da perda." : "Não foi possível atualizar a etapa.", version: Date.now() };
+  revalidatePath("/crm"); revalidatePath("/painel"); revalidatePath(`/leads/${parsed.data.leadId}`);
+  return { success: "Etapa comercial atualizada.", version: Date.now() };
 }
 
 export async function saveLeadFollowUp(_: LeadFollowUpState, formData: FormData): Promise<LeadFollowUpState> {
@@ -115,6 +127,8 @@ function leadUpdateValues(formData: FormData): LeadDetailUpdateValues {
     eventType: String(formData.get("eventType") ?? ""),
     desiredDate: String(formData.get("desiredDate") ?? ""),
     guestCount: String(formData.get("guestCount") ?? ""),
+    budgetRange: String(formData.get("budgetRange") ?? ""),
+    responsibleId: String(formData.get("responsibleId") ?? ""),
     notes: String(formData.get("notes") ?? ""),
   };
 }

@@ -4,8 +4,9 @@ import { AppShell } from "@/components/app-shell";
 import { SetupNotice } from "@/components/setup-notice";
 import { requireUser } from "@/lib/auth";
 import { formatCurrencyFromCents } from "@/lib/domain/quote";
-import { isOverdueFollowUp } from "@/lib/domain/lead";
+import { canManageLeads, isOverdueFollowUp } from "@/lib/domain/lead";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
+import { LeadStageForm } from "@/app/leads/[id]/lead-stage-form";
 
 type CrmRow = {
   id: string;
@@ -29,11 +30,13 @@ type CrmRow = {
 };
 
 const stages = [
-  { id: "entrada", label: "Entrada", statuses: ["novo", "em_atendimento"] },
-  { id: "qualificacao", label: "Qualificação", statuses: ["qualificado"] },
-  { id: "orcamento", label: "Orçamento", statuses: ["orcamento_em_elaboracao"] },
-  { id: "negociacao", label: "Proposta e negociação", statuses: ["proposta_enviada", "negociacao"] },
-  { id: "encerrados", label: "Encerrados", statuses: ["ganho", "perdido"] },
+  { id: "novo", label: "Novo lead", statuses: ["novo"] },
+  { id: "qualificacao", label: "Qualificação", statuses: ["em_atendimento", "qualificado"] },
+  { id: "visita", label: "Visita agendada", statuses: ["visita_agendada"] },
+  { id: "proposta", label: "Proposta enviada", statuses: ["orcamento_em_elaboracao", "proposta_enviada"] },
+  { id: "negociacao", label: "Negociação", statuses: ["negociacao"] },
+  { id: "fechado", label: "Fechado", statuses: ["ganho"] },
+  { id: "perdido", label: "Perdido", statuses: ["perdido"] },
 ] as const;
 
 export default async function CrmPage({ searchParams }: { searchParams: Promise<{ busca?: string; status?: string; followup?: string }> }) {
@@ -50,7 +53,7 @@ export default async function CrmPage({ searchParams }: { searchParams: Promise<
     const matchesSearch = !search || [row.name, row.company, row.phone, row.event_type, row.source, row.responsible_name].some((value) => value?.toLocaleLowerCase("pt-BR").includes(search));
     const matchesStatus = !query.status || query.status === "todos" || row.status === query.status;
     const isOverdue = Boolean(row.next_action_at && isOverdueFollowUp(row.next_action_at, today));
-    const matchesFollowUp = !query.followup || query.followup === "todos" || (query.followup === "vencidos" && isOverdue) || (query.followup === "agendados" && Boolean(row.next_action_at) && !isOverdue) || (query.followup === "sem_acao" && !row.next_action_at);
+    const matchesFollowUp = !query.followup || query.followup === "todos" || (query.followup === "vencidos" && isOverdue) || (query.followup === "hoje" && row.next_action_at === today) || (query.followup === "proximos" && Boolean(row.next_action_at && row.next_action_at > today)) || (query.followup === "agendados" && Boolean(row.next_action_at) && !isOverdue) || (query.followup === "sem_acao" && !row.next_action_at);
     return matchesSearch && matchesStatus && matchesFollowUp;
   });
   const active = rows.filter((row) => !["ganho", "perdido"].includes(row.status)).length;
@@ -58,6 +61,8 @@ export default async function CrmPage({ searchParams }: { searchParams: Promise<
   const lost = rows.filter((row) => row.status === "perdido").length;
   const conversion = closed + lost ? Math.round((closed / (closed + lost)) * 100) : 0;
   const overdue = rows.filter((row) => Boolean(row.next_action_at && isOverdueFollowUp(row.next_action_at, today))).length;
+  const todayFollowUps = rows.filter((row) => row.next_action_at === today).length;
+  const upcomingFollowUps = rows.filter((row) => Boolean(row.next_action_at && row.next_action_at > today)).length;
 
   return (
     <AppShell title="CRM">
@@ -68,12 +73,20 @@ export default async function CrmPage({ searchParams }: { searchParams: Promise<
 
       {error && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">Não foi possível carregar o CRM: {translateCrmError(error.message)}</p>}
 
-      <section className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+      <section className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+        <Metric label="Leads recebidos" value={String(rows.length)} />
         <Metric label="Contatos ativos" value={String(active)} />
+        <Metric label="Visitas agendadas" value={String(rows.filter((row) => row.status === "visita_agendada").length)} />
         <Metric label="Propostas enviadas" value={String(rows.filter((row) => row.status === "proposta_enviada").length)} />
         <Metric label="Eventos fechados" value={String(closed)} />
         <Metric label="Conversão" value={`${conversion}%`} />
         <Metric label="Follow-ups vencidos" value={String(overdue)} />
+      </section>
+
+      <section className="mt-3 flex flex-wrap gap-2" aria-label="Filas de follow-up">
+        <QueueLink href="/crm?followup=hoje" label="Follow-ups de hoje" value={todayFollowUps} />
+        <QueueLink href="/crm?followup=vencidos" label="Atrasados" value={overdue} tone="danger" />
+        <QueueLink href="/crm?followup=proximos" label="Próximos" value={upcomingFollowUps} />
       </section>
 
       <form className="mt-4 grid gap-2 rounded-lg border border-[#d9ded8] bg-[#fffdf8] p-3 sm:grid-cols-[1fr_190px_190px_auto]">
@@ -86,6 +99,8 @@ export default async function CrmPage({ searchParams }: { searchParams: Promise<
           <select id="crm-follow-up" name="followup" defaultValue={query.followup ?? "todos"}>
             <option value="todos">Todos</option>
             <option value="vencidos">Follow-up vencido</option>
+            <option value="hoje">Follow-ups de hoje</option>
+            <option value="proximos">Próximos follow-ups</option>
             <option value="agendados">Próxima ação agendada</option>
             <option value="sem_acao">Sem próxima ação</option>
           </select>
@@ -101,7 +116,7 @@ export default async function CrmPage({ searchParams }: { searchParams: Promise<
       </form>
 
       <section className="mt-4 overflow-x-auto pb-3" aria-label="Jornada comercial">
-        <div className="grid min-w-[1080px] grid-cols-5 gap-3">
+        <div className="grid min-w-[1500px] grid-cols-7 gap-3">
           {stages.map((stage) => {
             const contacts = filtered.filter((row) => (stage.statuses as readonly string[]).includes(row.status));
             return (
@@ -111,7 +126,7 @@ export default async function CrmPage({ searchParams }: { searchParams: Promise<
                   <span className="rounded-md bg-white px-2 py-0.5 text-xs font-semibold text-[#5f7180]">{contacts.length}</span>
                 </header>
                 <div className="space-y-2 p-2">
-                  {contacts.map((contact) => <ContactCard key={contact.id} contact={contact} />)}
+                  {contacts.map((contact) => <ContactCard key={contact.id} contact={contact} canManage={canManageLeads(permissions)} />)}
                   {!contacts.length && <p className="rounded-md border border-dashed border-[#d9ded8] px-2 py-4 text-center text-xs text-[#5f7180]">Nenhum contato</p>}
                 </div>
               </section>
@@ -123,9 +138,10 @@ export default async function CrmPage({ searchParams }: { searchParams: Promise<
   );
 }
 
-function ContactCard({ contact }: { contact: CrmRow }) {
+function ContactCard({ canManage, contact }: { canManage: boolean; contact: CrmRow }) {
   return (
-    <Link href={`/leads/${contact.id}`} className="block rounded-lg border border-[#d9ded8] bg-[#fffdf8] p-3 hover:border-[#0f5f8f] hover:bg-white">
+    <article className="rounded-lg border border-[#d9ded8] bg-[#fffdf8] p-3 hover:border-[#0f5f8f] hover:bg-white">
+      <Link href={`/leads/${contact.id}`} className="block">
       <div className="flex items-start justify-between gap-2">
         <p className="font-semibold text-[#092f38]">{contact.name}</p>
         <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${contact.status === "ganho" ? "bg-emerald-50 text-emerald-700" : contact.status === "perdido" ? "bg-red-50 text-red-700" : "bg-[#dcecf6] text-[#083653]"}`}>{statusLabel(contact.status)}</span>
@@ -139,11 +155,14 @@ function ContactCard({ contact }: { contact: CrmRow }) {
       </dl>
       {contact.next_action && <p className={`mt-3 rounded-md px-2 py-1 text-xs font-medium ${isOverdueFollowUp(contact.next_action_at ?? "9999-12-31", brazilToday()) ? "bg-red-50 text-red-800" : "bg-[#edf5ee] text-[#356451]"}`}>{contact.next_action}</p>}
       {contact.latest_quote_id && <p className="mt-3 border-t border-[#edf1ee] pt-2 text-xs font-semibold text-[#0f5f8f]">{contact.latest_quote_status ? statusLabel(contact.latest_quote_status) : "Orçamento"} · {formatCurrencyFromCents(contact.latest_quote_total_cents ?? 0)}</p>}
-    </Link>
+      </Link>
+      {canManage && <details className="mt-3 border-t border-[#edf1ee] pt-2"><summary className="cursor-pointer text-xs font-semibold text-[#356451]">Mover no funil</summary><div className="mt-2"><LeadStageForm leadId={contact.id} status={contact.status} /></div></details>}
+    </article>
   );
 }
 
 function Metric({ label, value }: { label: string; value: string }) { return <div className="rounded-lg border border-[#d9ded8] bg-[#fffdf8] px-3 py-2"><p className="text-xs font-semibold uppercase tracking-[0.06em] text-[#5f7180]">{label}</p><p className="mt-1 text-2xl font-semibold text-[#083653]">{value}</p></div>; }
+function QueueLink({ href, label, tone = "normal", value }: { href: string; label: string; tone?: "normal" | "danger"; value: number }) { return <Link href={href} className={`rounded-md border px-3 py-2 text-sm font-semibold ${tone === "danger" ? "border-red-200 bg-red-50 text-red-800" : "border-[#d9ded8] bg-[#fffdf8] text-[#083653]"}`}>{label}: {value}</Link>; }
 function Info({ label, value }: { label: string; value: string }) { return <div className="flex justify-between gap-2"><dt className="text-[#5f7180]">{label}</dt><dd className="truncate text-right font-medium text-[#092f38]">{value}</dd></div>; }
 function formatDate(value: string) { const [year, month, day] = value.split("-"); return year && month && day ? `${day}/${month}/${year}` : value; }
 function brazilToday() {
@@ -151,5 +170,5 @@ function brazilToday() {
   const values = Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
   return `${values.year}-${values.month}-${values.day}`;
 }
-function statusLabel(status: string) { return ({ novo: "Novo", em_atendimento: "Em atendimento", qualificado: "Qualificado", orcamento_em_elaboracao: "Orçamento", proposta_enviada: "Proposta enviada", negociacao: "Negociação", ganho: "Evento fechado", perdido: "Não avançou", rascunho: "Rascunho", em_elaboracao: "Em elaboração", enviado: "Enviado", aprovado: "Aprovado", recusado: "Recusado" } as Record<string, string>)[status] ?? status.replaceAll("_", " "); }
+function statusLabel(status: string) { return ({ novo: "Novo lead", em_atendimento: "Qualificação", qualificado: "Qualificação", visita_agendada: "Visita agendada", orcamento_em_elaboracao: "Proposta enviada", proposta_enviada: "Proposta enviada", negociacao: "Negociação", ganho: "Fechado", perdido: "Perdido", rascunho: "Rascunho", em_elaboracao: "Em elaboração", enviado: "Enviado", aprovado: "Aprovado", recusado: "Recusado" } as Record<string, string>)[status] ?? status.replaceAll("_", " "); }
 function translateCrmError(message: string) { return message.includes("permission denied") ? "Seu usuário não possui permissão comercial." : message.includes("get_crm_pipeline") ? "Aplique a migration do CRM no Supabase." : message; }
