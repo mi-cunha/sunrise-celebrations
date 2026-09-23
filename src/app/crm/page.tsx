@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { CSSProperties } from "react";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { SetupNotice } from "@/components/setup-notice";
@@ -65,15 +66,15 @@ export default async function CrmPage({ searchParams }: { searchParams: Promise<
   const upcomingFollowUps = rows.filter((row) => Boolean(row.next_action_at && row.next_action_at > today)).length;
 
   return (
-    <AppShell title="CRM">
+    <AppShell title="Funil comercial">
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-[#5f7180]">Jornada comercial dos contatos até o fechamento do evento.</p>
-        <Link href="/leads/novo" className="rounded-md bg-[#083653] px-3 py-2 text-sm font-semibold text-white hover:bg-[#0f5f8f]">Novo contato</Link>
+        <Link href="/leads/novo" className="workspace-button">+ Novo contato</Link>
       </div>
 
       {error && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">Não foi possível carregar o CRM: {translateCrmError(error.message)}</p>}
 
-      <section className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+      <section className="crm-metrics" aria-label="Resumo comercial">
         <Metric label="Leads recebidos" value={String(rows.length)} />
         <Metric label="Contatos ativos" value={String(active)} />
         <Metric label="Visitas agendadas" value={String(rows.filter((row) => row.status === "visita_agendada").length)} />
@@ -89,7 +90,7 @@ export default async function CrmPage({ searchParams }: { searchParams: Promise<
         <QueueLink href="/crm?followup=proximos" label="Próximos" value={upcomingFollowUps} />
       </section>
 
-      <form className="mt-4 grid gap-2 rounded-lg border border-[#d9ded8] bg-[#fffdf8] p-3 sm:grid-cols-[1fr_190px_190px_auto]">
+      <form className="crm-filters">
         <div>
           <label htmlFor="crm-search">Buscar contato</label>
           <input id="crm-search" name="busca" defaultValue={query.busca ?? ""} placeholder="Nome, empresa, telefone, evento ou responsável" />
@@ -115,13 +116,15 @@ export default async function CrmPage({ searchParams }: { searchParams: Promise<
         <button className="self-end rounded-md bg-[#0f5f8f] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#083653]">Filtrar</button>
       </form>
 
-      <section className="mt-4 overflow-x-auto pb-3" aria-label="Jornada comercial">
-        <div className="grid min-w-[1500px] grid-cols-7 gap-3">
-          {stages.map((stage) => {
+      <div className="crm-board-heading"><h2>Jornada dos leads <span className="ml-2 text-xs font-normal text-slate-500">{filtered.length} contatos</span></h2><span>Role para explorar as etapas →</span></div>
+      {!filtered.length && <p className="mb-4 rounded-lg border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-600">{rows.length ? "Nenhum contato corresponde aos filtros." : "Seu funil está pronto para receber o primeiro contato."} <Link href={rows.length ? "/crm" : "/leads/novo"} className="ml-2 font-semibold text-[#0f5f8f] underline">{rows.length ? "Limpar filtros" : "Cadastrar contato"}</Link></p>}
+      <section aria-label="Jornada comercial">
+        <div className="crm-board" tabIndex={0} role="region" aria-label="Etapas do funil; use as setas para rolar">
+          {stages.map((stage, index) => {
             const contacts = filtered.filter((row) => (stage.statuses as readonly string[]).includes(row.status));
             return (
-              <section key={stage.id} className="rounded-lg border border-[#d9ded8] bg-[#f7f4ed]">
-                <header className="flex items-center justify-between border-b border-[#d9ded8] px-3 py-2">
+              <section key={stage.id} className="crm-column" style={{ "--stage-color": ["#7d94b0", "#8d82b8", "#c29b52", "#6593b8", "#b58564", "#569b7d", "#b87980"][index] } as CSSProperties}>
+                <header className="crm-column-header">
                   <h2 className="text-sm font-semibold text-[#083653]">{stage.label}</h2>
                   <span className="rounded-md bg-white px-2 py-0.5 text-xs font-semibold text-[#5f7180]">{contacts.length}</span>
                 </header>
@@ -140,10 +143,10 @@ export default async function CrmPage({ searchParams }: { searchParams: Promise<
 
 function ContactCard({ canManage, contact }: { canManage: boolean; contact: CrmRow }) {
   return (
-    <article className="rounded-lg border border-[#d9ded8] bg-[#fffdf8] p-3 hover:border-[#0f5f8f] hover:bg-white">
+    <article className="crm-card">
       <Link href={`/leads/${contact.id}`} className="block">
       <div className="flex items-start justify-between gap-2">
-        <p className="font-semibold text-[#092f38]">{contact.name}</p>
+        <p className="break-words text-sm font-semibold text-[#092f38]">{contact.name}</p>
         <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${contact.status === "ganho" ? "bg-emerald-50 text-emerald-700" : contact.status === "perdido" ? "bg-red-50 text-red-700" : "bg-[#dcecf6] text-[#083653]"}`}>{statusLabel(contact.status)}</span>
       </div>
       <p className="mt-1 text-xs text-[#5f7180]">{contact.company ?? contact.phone}</p>
@@ -161,7 +164,7 @@ function ContactCard({ canManage, contact }: { canManage: boolean; contact: CrmR
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) { return <div className="rounded-lg border border-[#d9ded8] bg-[#fffdf8] px-3 py-2"><p className="text-xs font-semibold uppercase tracking-[0.06em] text-[#5f7180]">{label}</p><p className="mt-1 text-2xl font-semibold text-[#083653]">{value}</p></div>; }
+function Metric({ label, value }: { label: string; value: string }) { return <div className="crm-metric"><p>{label}</p><strong>{value}</strong></div>; }
 function QueueLink({ href, label, tone = "normal", value }: { href: string; label: string; tone?: "normal" | "danger"; value: number }) { return <Link href={href} className={`rounded-md border px-3 py-2 text-sm font-semibold ${tone === "danger" ? "border-red-200 bg-red-50 text-red-800" : "border-[#d9ded8] bg-[#fffdf8] text-[#083653]"}`}>{label}: {value}</Link>; }
 function Info({ label, value }: { label: string; value: string }) { return <div className="flex justify-between gap-2"><dt className="text-[#5f7180]">{label}</dt><dd className="truncate text-right font-medium text-[#092f38]">{value}</dd></div>; }
 function formatDate(value: string) { const [year, month, day] = value.split("-"); return year && month && day ? `${day}/${month}/${year}` : value; }

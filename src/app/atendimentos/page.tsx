@@ -2,7 +2,9 @@ import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { SetupNotice } from "@/components/setup-notice";
 import { conversationStatusLabel, conversationStatuses } from "@/lib/domain/conversation";
+import { defaultEventTypes } from "@/lib/domain/lead";
 import { requireUser } from "@/lib/auth";
+import { formatDateTime } from "@/lib/date-format";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 
 type Conversation = {
@@ -11,9 +13,10 @@ type Conversation = {
   ai_paused: boolean;
   needs_human: boolean;
   assigned_to: string | null;
+  channel: string;
   created_at: string;
   assignee: { display_name: string | null } | null;
-  leads: { name: string; company: string | null; phone: string; status: string } | null;
+  leads: { name: string; company: string | null; phone: string; status: string; event_type: string | null } | null;
 };
 
 const statusFilters = [
@@ -32,29 +35,33 @@ const priorityByStatus: Record<string, number> = {
 export default async function ConversationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string | string[] }>;
+  searchParams: Promise<{ status?: string | string[]; assignee?: string | string[]; eventType?: string | string[]; channel?: string | string[]; human?: string | string[]; period?: string | string[] }>;
 }) {
   if (!hasSupabaseConfig()) return <SetupNotice />;
 
-  const { status } = await searchParams;
-  const activeStatus = normalizeStatusFilter(status);
+  const params = await searchParams;
+  const activeStatus = normalizeStatusFilter(params.status);
+  const activeAssignee = firstParam(params.assignee);
+  const activeEventType = firstParam(params.eventType);
+  const activeChannel = firstParam(params.channel) || "todos";
+  const activeHuman = firstParam(params.human) || "todos";
+  const activePeriod = firstParam(params.period) || "todos";
   const { supabase } = await requireUser();
 
-  const { data, error } = await supabase
+  const [{ data, error }, { data: people }] = await Promise.all([supabase
     .from("conversations")
-    .select("id,status,ai_paused,needs_human,assigned_to,created_at,assignee:profiles!conversations_assigned_to_fkey(display_name),leads(name,company,phone,status)")
-    .eq("channel", "whatsapp_cloud")
+    .select("id,status,ai_paused,needs_human,assigned_to,created_at,channel,assignee:profiles!conversations_assigned_to_fkey(display_name),leads(name,company,phone,status,event_type)")
     .order("created_at", { ascending: false })
-    .limit(100);
+    .limit(100), supabase.rpc("get_active_operational_profiles")]);
 
   const conversations = ((data ?? []) as unknown as Conversation[]).sort(compareConversationsByPriority);
-  const filteredConversations = conversations.filter((conversation) => matchesStatusFilter(conversation, activeStatus));
+  const filteredConversations = conversations.filter((conversation) => matchesFilters(conversation, activeStatus, activeAssignee, activeEventType, activeChannel, activeHuman, activePeriod));
   const counts = countConversations(conversations);
 
   return (
     <AppShell title="Atendimentos">
-      <p className="mt-2 max-w-2xl text-slate-600">
-        Fila oficial do WhatsApp. Todo contato começa com IA em triagem; quando uma pessoa assume, a IA fica pausada naquela conversa.
+      <p className="mt-2 max-w-2xl text-sm text-slate-500">
+        Conversas e contexto comercial em um só lugar. Assuma um atendimento para continuar com o cliente.
       </p>
 
       {error && (
@@ -63,7 +70,7 @@ export default async function ConversationsPage({
         </p>
       )}
 
-      <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="mt-6 grid grid-cols-2 gap-3 xl:grid-cols-4">
         <MetricCard label="Precisa humano" value={counts.precisa_humano} tone="danger" />
         <MetricCard label="IA em triagem" value={counts.ia_triagem} />
         <MetricCard label="Humano assumiu" value={counts.humano_assumiu} />
@@ -76,11 +83,12 @@ export default async function ConversationsPage({
           return (
             <Link
               key={filter.value}
-              href={filter.value === "todos" ? "/atendimentos" : `/atendimentos?status=${filter.value}`}
+              href={buildStatusHref(filter.value, params)}
+              aria-current={isActive ? "page" : undefined}
               className={`rounded-full border px-4 py-2 text-sm font-semibold transition active:scale-[0.98] ${
                 isActive
-                  ? "border-[#18352d] bg-[#18352d] text-white shadow-sm"
-                  : "border-[#dbe3dc] bg-white text-[#18352d] hover:border-[#b7c8bb] hover:bg-[#f6fbf7]"
+                  ? "border-[#083653] bg-[#083653] text-white shadow-sm"
+                  : "border-[#dce2e8] bg-white text-[#526172] hover:border-[#aebfcd] hover:bg-[#f3f6f9]"
               }`}
             >
               {filter.label}
@@ -92,7 +100,17 @@ export default async function ConversationsPage({
         })}
       </nav>
 
-      <section className="mt-4 overflow-hidden rounded-xl border border-[#dbe3dc] bg-white">
+      <form className="crm-filters mt-4" method="get">
+        <div><label htmlFor="atendimento-assignee">Atendente</label><select id="atendimento-assignee" name="assignee" defaultValue={activeAssignee}><option value="todos">Todos</option><option value="sem_responsavel">Sem responsável</option>{(people ?? []).map((person) => <option key={person.id} value={person.id}>{person.display_name ?? "Usuário"}</option>)}</select></div>
+        <div><label htmlFor="atendimento-event">Tipo de evento</label><select id="atendimento-event" name="eventType" defaultValue={activeEventType}><option value="todos">Todos</option>{defaultEventTypes.map((eventType) => <option key={eventType} value={eventType}>{eventType}</option>)}</select></div>
+        <div><label htmlFor="atendimento-channel">Canal</label><select id="atendimento-channel" name="channel" defaultValue={activeChannel}><option value="todos">Todos</option><option value="whatsapp_cloud">WhatsApp oficial</option><option value="simulado">Simulado</option></select></div>
+        <div><label htmlFor="atendimento-human">Atendimento</label><select id="atendimento-human" name="human" defaultValue={activeHuman}><option value="todos">Todos</option><option value="precisa_humano">Precisa humano</option><option value="ia_pausada">IA pausada</option><option value="sem_responsavel">Sem responsável</option></select></div>
+        <div><label htmlFor="atendimento-period">Período</label><select id="atendimento-period" name="period" defaultValue={activePeriod}><option value="todos">Todos</option><option value="hoje">Hoje</option><option value="7_dias">Últimos 7 dias</option><option value="30_dias">Últimos 30 dias</option></select></div>
+        <button className="self-end rounded-md bg-[#0f5f8f] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#083653]">Filtrar atendimentos</button>
+      </form>
+
+      <section className="dashboard-panel mt-5">
+        <header className="dashboard-panel-header"><h2>Caixa de entrada</h2><span className="panel-count">{filteredConversations.length} conversas</span></header>
         {filteredConversations.length ? (
           <ul>
             {filteredConversations.map((conversation) => {
@@ -105,7 +123,9 @@ export default async function ConversationsPage({
                       isPriority ? "bg-red-50/60 hover:bg-red-50" : "hover:bg-[#f6fbf7]"
                     }`}
                   >
-                    <div>
+                    <div className="flex min-w-0 items-start gap-3">
+                      <span className="avatar" aria-hidden="true">{(conversation.leads?.name ?? "CL").slice(0, 2).toUpperCase()}</span>
+                      <div className="min-w-0 break-words">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="font-semibold underline-offset-4">{conversation.leads?.name ?? "Lead sem nome"}</p>
                         {isPriority && <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">Prioridade</span>}
@@ -115,8 +135,9 @@ export default async function ConversationsPage({
                       </p>
                       <p className="mt-1 text-xs text-slate-500">
                         Jornada: {conversation.leads?.status.replaceAll("_", " ") ?? "não informado"} · Responsável: {conversation.assignee?.display_name ?? "não assumido"} · Criado em{" "}
-                        {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(conversation.created_at))}
+                        {formatDateTime(conversation.created_at)}
                       </p>
+                      </div>
                     </div>
 
                     <div className="flex flex-wrap gap-2">
@@ -132,11 +153,12 @@ export default async function ConversationsPage({
             })}
           </ul>
         ) : (
-          <div className="p-8">
+          <div className="dashboard-empty py-14">
             <h2 className="font-semibold">Nenhum atendimento neste filtro.</h2>
             <p className="mt-1 text-slate-600">
               Quando uma mensagem chegar pelo WhatsApp oficial, o atendimento aparecerá aqui.
             </p>
+            {activeStatus !== "todos" && <Link href="/atendimentos" className="workspace-button secondary mt-5">Ver todas as conversas</Link>}
           </div>
         )}
       </section>
@@ -155,6 +177,33 @@ function matchesStatusFilter(conversation: Conversation, status: string) {
   if (status === "todos") return true;
   if (status === "precisa_humano") return needsHumanAttention(conversation);
   return conversation.status === status;
+}
+
+function firstParam(value: string | string[] | undefined) { return Array.isArray(value) ? value[0] ?? "todos" : value ?? "todos"; }
+function buildStatusHref(status: string, params: { assignee?: string | string[]; eventType?: string | string[]; channel?: string | string[]; human?: string | string[]; period?: string | string[] }) {
+  const search = new URLSearchParams();
+  if (status !== "todos") search.set("status", status);
+  for (const key of ["assignee", "eventType", "channel", "human", "period"] as const) {
+    const value = firstParam(params[key]);
+    if (value && value !== "todos") search.set(key, value);
+  }
+  const query = search.toString();
+  return query ? `/atendimentos?${query}` : "/atendimentos";
+}
+function matchesFilters(conversation: Conversation, status: string, assignee: string, eventType: string, channel: string, human: string, period: string) {
+  if (!matchesStatusFilter(conversation, status)) return false;
+  if (assignee !== "todos" && (assignee === "sem_responsavel" ? conversation.assigned_to !== null : conversation.assigned_to !== assignee)) return false;
+  if (eventType !== "todos" && conversation.leads?.event_type !== eventType) return false;
+  if (channel !== "todos" && conversation.channel !== channel) return false;
+  if (human === "precisa_humano" && !needsHumanAttention(conversation)) return false;
+  if (human === "ia_pausada" && !conversation.ai_paused) return false;
+  if (human === "sem_responsavel" && conversation.assigned_to !== null) return false;
+  if (period !== "todos") {
+    const days = period === "hoje" ? 0 : period === "7_dias" ? 7 : 30;
+    const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - days);
+    if (new Date(conversation.created_at) < start) return false;
+  }
+  return true;
 }
 
 function compareConversationsByPriority(left: Conversation, right: Conversation) {
@@ -187,7 +236,7 @@ function countForFilter(counts: ReturnType<typeof countConversations>, filter: s
 
 function MetricCard({ label, value, tone = "default" }: { label: string; value: number; tone?: "default" | "danger" }) {
   return (
-    <div className={`rounded-xl border p-4 ${tone === "danger" ? "border-red-100 bg-red-50" : "border-[#dbe3dc] bg-white"}`}>
+    <div className={`dashboard-metric ${tone === "danger" && value > 0 ? "border-red-200 bg-red-50" : ""}`}>
       <p className={`text-sm ${tone === "danger" ? "text-red-700" : "text-slate-500"}`}>{label}</p>
       <p className={`mt-1 text-2xl font-semibold ${tone === "danger" ? "text-red-800" : "text-[#18352d]"}`}>{value}</p>
     </div>

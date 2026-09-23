@@ -30,7 +30,7 @@ type QuoteRow = {
   total_amount_cents: number;
   approved_at: string | null;
   created_at: string;
-  leads: { name: string } | null;
+  leads: { id: string; name: string } | null;
   contracted_events: { id: string }[] | null;
 };
 
@@ -54,7 +54,7 @@ export default async function Dashboard() {
   const [{ data: leads }, { data: conversations }, { data: quotes }, { data: events }] = await Promise.all([
     supabase.from("leads").select("id,name,company,phone,status,created_at").order("created_at", { ascending: false }).limit(8),
     supabase.from("conversations").select("id,status,needs_human,created_at,leads(name,phone)").order("created_at", { ascending: false }).limit(20),
-    supabase.from("quotes").select("id,title,status,total_amount_cents,approved_at,created_at,leads(name),contracted_events(id)").order("created_at", { ascending: false }).limit(30),
+    supabase.from("quotes").select("id,title,status,total_amount_cents,approved_at,created_at,leads(id,name),contracted_events(id)").order("created_at", { ascending: false }).limit(30),
     supabase
       .from("contracted_events")
       .select("id,title,status,event_date,guest_count,contracted_event_checklist(id,is_done),contracted_event_payments(id,status,amount_cents,due_date)")
@@ -71,6 +71,15 @@ export default async function Dashboard() {
 
   const humanQueue = conversationsRows.filter((conversation) => conversation.status !== "encerrado" && (conversation.needs_human || conversation.status === "aguardando_humano"));
   const openQuotes = quoteRows.filter((quote) => quote.status === "rascunho" || quote.status === "em_elaboracao");
+  const openQuoteContacts = Array.from(
+    openQuotes.reduce((groups, quote) => {
+      const leadId = quote.leads?.id ?? quote.id;
+      const group = groups.get(leadId) ?? { leadId, name: quote.leads?.name ?? "Contato", count: 0, newest: quote };
+      group.count += 1;
+      groups.set(leadId, group);
+      return groups;
+    }, new Map<string, { leadId: string; name: string; count: number; newest: QuoteRow }>()).values(),
+  );
   const sentQuotes = quoteRows.filter((quote) => quote.status === "enviado");
   const approvedWithoutEvent = quoteRows.filter((quote) => quote.status === "aprovado" && !quote.contracted_events?.length);
   const activeEvents = eventRows.filter((event) => !["realizado", "cancelado"].includes(event.status));
@@ -82,21 +91,21 @@ export default async function Dashboard() {
 
   return (
     <AppShell title="Painel">
-      <section className="mt-4 rounded-lg border border-[#d9ded8] bg-[#fffdf8] p-3">
+      <section className="dashboard-intro">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold text-[#092f38]">Prioridades da operação</h2>
-            <p className="text-sm text-[#5f7180]">Atendimentos, orçamentos, eventos e pendências.</p>
+            <h2>Uma visão do que precisa da sua atenção.</h2>
+            <p>Relacionamentos bem cuidados. Celebrações bem planejadas.</p>
           </div>
           {canCreateContact && (
-            <Link href="/leads/novo" className="rounded-md bg-[#083653] px-3 py-2 text-sm font-semibold text-white hover:bg-[#0f5f8f]">
-              Novo contato
+            <Link href="/leads/novo" className="workspace-button">
+              + Novo contato
             </Link>
           )}
         </div>
       </section>
 
-      <section className="mt-3 grid gap-2 md:grid-cols-3 xl:grid-cols-5" aria-label="Métricas operacionais">
+      <section className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5" aria-label="Métricas operacionais">
         <Metric label="Aguardando humano" value={humanQueue.length} tone={humanQueue.length ? "danger" : "neutral"} />
         <Metric label="Orçamentos abertos" value={openQuotes.length} />
         <Metric label="Propostas enviadas" value={sentQuotes.length} />
@@ -104,7 +113,7 @@ export default async function Dashboard() {
         <Metric label={canSeeFinancial ? "Pendências financeiras" : "Pendências"} value={canSeeFinancial ? financialPending.length : checklistPending.length} tone={(canSeeFinancial ? financialPending.length : checklistPending.length) ? "warning" : "neutral"} />
       </section>
 
-      <section className="mt-4 grid gap-3 xl:grid-cols-[1fr_1fr]">
+      <section className="mt-5 grid gap-4 xl:grid-cols-[1fr_1fr]">
         <PanelList
           title="Fila de atendimento"
           empty="Nenhum contato aguardando humano."
@@ -118,10 +127,10 @@ export default async function Dashboard() {
         <PanelList
           title="Orçamentos em andamento"
           empty="Nenhum orçamento aberto."
-          items={openQuotes.slice(0, 5).map((quote) => ({
-            href: `/orcamentos/${quote.id}`,
-            title: quote.title,
-            meta: `${quote.leads?.name ?? "Contato"} · ${formatCurrencyFromCents(quote.total_amount_cents)}`,
+          items={openQuoteContacts.slice(0, 5).map((contact) => ({
+            href: `/leads/${contact.leadId}`,
+            title: contact.name,
+            meta: `${contact.count} ${contact.count === 1 ? "orçamento em andamento" : "orçamentos em andamento"} · último: ${formatCurrencyFromCents(contact.newest.total_amount_cents)}`,
           }))}
         />
 
@@ -153,9 +162,9 @@ export default async function Dashboard() {
         />
       </section>
 
-      <section className="mt-3 rounded-lg border border-[#d9ded8] bg-[#fffdf8]">
-        <div className="flex items-center justify-between border-b border-[#d9ded8] px-3 py-2">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.08em] text-[#083653]">Contatos recentes</h2>
+      <section className="dashboard-panel mt-5">
+        <div className="dashboard-panel-header">
+          <h2>Contatos recentes</h2>
           {canCreateContact && (
             <Link href="/leads/novo" className="text-sm font-semibold text-[#0f5f8f] hover:underline">
               Novo contato
@@ -166,7 +175,8 @@ export default async function Dashboard() {
           <ul className="divide-y divide-[#d9ded8]">
             {recentContacts.map((contact) => (
               <li key={contact.id}>
-                <Link href={`/leads/${contact.id}`} className="grid gap-1 px-3 py-2 hover:bg-[#dcecf6]/45 sm:grid-cols-[1fr_auto] sm:items-center">
+                <Link href={`/leads/${contact.id}`} className="dashboard-row flex-wrap">
+                  <span className="avatar" aria-hidden="true">{contact.name.slice(0, 2).toUpperCase()}</span>
                   <div>
                     <p className="font-semibold text-[#092f38]">{contact.name}</p>
                     <p className="text-sm text-[#5f7180]">{contact.company ? `${contact.company} · ${contact.phone}` : contact.phone}</p>
@@ -192,8 +202,8 @@ function Metric({ label, value, tone = "neutral" }: { label: string; value: numb
   }[tone];
 
   return (
-    <div className="rounded-lg border border-[#d9ded8] bg-[#fffdf8] px-3 py-2">
-      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#5f7180]">{label}</p>
+    <div className="dashboard-metric">
+      <p>{label}</p>
       <p className={`mt-1 text-2xl font-semibold ${toneClass}`}>{value}</p>
     </div>
   );
@@ -209,23 +219,28 @@ function PanelList({
   title: string;
 }) {
   return (
-    <section className="rounded-lg border border-[#d9ded8] bg-[#fffdf8]">
-      <div className="border-b border-[#d9ded8] px-3 py-2">
-        <h2 className="text-sm font-semibold uppercase tracking-[0.08em] text-[#083653]">{title}</h2>
+    <section className="dashboard-panel">
+      <div className="dashboard-panel-header">
+        <h2>{title}</h2>
+        <span className="panel-count">{items.length} em destaque</span>
       </div>
       {items.length ? (
         <ul className="divide-y divide-[#d9ded8]">
           {items.map((item, index) => (
             <li key={`${item.title}-${index}`}>
-              <Link href={item.href} className="block px-3 py-2 hover:bg-[#dcecf6]/45">
+              <Link href={item.href} className="dashboard-row">
+                <span className="avatar" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+                <div>
                 <p className="font-semibold text-[#092f38]">{item.title}</p>
                 <p className="text-sm text-[#5f7180]">{item.meta}</p>
+                </div>
+                <span className="row-arrow" aria-hidden="true">↗</span>
               </Link>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="px-3 py-3 text-sm text-[#5f7180]">{empty}</p>
+        <p className="dashboard-empty"><span aria-hidden="true">✓</span>{empty}</p>
       )}
     </section>
   );
