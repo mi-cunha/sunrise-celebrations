@@ -35,8 +35,8 @@ export default async function HelpPage() {
         <GuideCard
           title="3. Orçamento e proposta"
           description="É onde a equipe monta valores, pacotes, itens extras e a proposta que será apresentada ao cliente."
-          href="/painel#orcamentos"
-          action="Ver orçamentos"
+          href="/crm"
+          action="Abrir contatos e orçamentos"
         />
         <GuideCard
           title="4. Evento contratado"
@@ -52,7 +52,8 @@ export default async function HelpPage() {
             <ol className="list-decimal space-y-2 pl-5">
               <li>Cadastre o contato com os dados disponíveis.</li>
               <li>Complete dados faltantes antes de montar a proposta.</li>
-              <li>Crie o orçamento e selecione pacote/itens.</li>
+              <li>Crie o orçamento, selecione o pacote e informe o valor por pessoa.</li>
+              <li>Quando o pacote tiver escolhas, marque as opções definidas pelo cliente.</li>
               <li>Revise a proposta do cliente.</li>
               <li>Marque o orçamento como enviado.</li>
               <li>Quando houver retorno, registre aprovação ou recusa.</li>
@@ -82,10 +83,10 @@ export default async function HelpPage() {
 
           <HelpSection title="Pacotes, itens e fornecedores">
             <p>
-              Pacotes agrupam itens recorrentes, como buffet standard, premium ou café da manhã. Itens avulsos servem para adicionais como decoração, DJ, bar de drinks e serviços específicos.
+              Cada pacote reúne valor por pessoa, itens inclusos e, se necessário, opções para o cliente escolher. Itens avulsos do orçamento servem para adicionais cobrados separadamente, como DJ ou decoração.
             </p>
             <p className="mt-2">
-              Fornecedores, por enquanto, são cadastrados dentro de cada evento contratado. Isso mantém contatos e observações ligados ao evento certo.
+              Para montar ou alterar pacotes, abra Configurações → Pacotes. A biblioteca de itens reutilizáveis fica dentro dessa mesma área. Fornecedores são cadastrados dentro de cada evento contratado.
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
               <Link href="/admin/opcoes#pacotes" className="rounded-lg border border-[#dbe3dc] px-4 py-2 text-sm font-semibold text-[#18352d] hover:bg-[#f7fbff]">
@@ -100,9 +101,20 @@ export default async function HelpPage() {
       </section>
 
       <section className="mt-5 space-y-4">
+        <HelpSection title="Como montar um pacote" id="guia-pacotes">
+          <ol className="list-decimal space-y-2 pl-5">
+            <li>Em <Link href="/admin/opcoes#pacotes" className="font-semibold underline">Configurações → Pacotes</Link>, abra “Criar pacote”. Informe nome, tipos de evento e valor por pessoa.</li>
+            <li>Abra o pacote criado. Para algo exclusivo, use “Adicionar item exclusivo deste pacote”.</li>
+            <li>Para usar o mesmo item em vários pacotes, crie uma subcategoria e um item na “Biblioteca de itens reutilizáveis”. Depois, volte ao pacote e abra “Itens reutilizáveis e escolhas”.</li>
+            <li>Selecione a subcategoria e os itens. Com mínimo e máximo zero, todos entram como itens fixos. Para dar opções ao cliente, informe quantos ele pode escolher. Por exemplo, mínimo 2 e máximo 2 significa “escolha dois”.</li>
+            <li>No orçamento, aplique o pacote e salve as escolhas do cliente. Confira a proposta antes de compartilhar. A ficha operacional usa os mesmos itens escolhidos.</li>
+          </ol>
+          <p className="mt-3 rounded-lg bg-[#f7fbff] p-3">Pacotes já cadastrados continuam disponíveis. Os itens antigos e os da biblioteca aparecem juntos no pacote e no orçamento.</p>
+        </HelpSection>
+
         <HelpSection title="Configurações" id="configuracoes">
           <p>
-            A área de configurações concentra os padrões usados pela equipe: tipos de evento, origens, pacotes, itens de orçamento, textos de proposta, logo e usuários.
+            A área de configurações concentra os padrões usados pela equipe: tipos de evento, origens, pacotes, itens de orçamento, textos de proposta e logo. Usuários e acessos ficam em uma página própria.
           </p>
           <div className="mt-4 flex flex-wrap gap-3">
             <Link href="/admin/opcoes#opcoes" className="rounded-lg border border-[#dbe3dc] px-4 py-2 text-sm font-semibold text-[#18352d] hover:bg-[#f7fbff]">

@@ -8,7 +8,7 @@ import { OptionForm } from "./option-form";
 import { CompanyLogoForm, ProposalOptionForm, QuoteItemCatalogOptionForm } from "./proposal-settings-forms";
 import { OptionAccordionList, ProposalOptionAccordionList, QuoteItemCatalogAccordionList } from "./catalog-accordions";
 import { EventPackageAccordionList, EventPackageForm } from "./package-forms";
-import { PackageModelPanel, type PackageLibraryItem, type PackageRule, type PackageSubcategory } from "./package-model-forms";
+import { PackageLibraryPanel, type PackageLibraryItem, type PackageRule, type PackageSubcategory } from "./package-model-forms";
 import { WhatsAppConnectionPanel } from "./whatsapp-connection";
 
 type Option = { id: string; kind: "event_type" | "lead_source"; name: string; is_active: boolean };
@@ -35,14 +35,8 @@ type EventPackage = {
     choice_group: string | null;
     choice_min: number | null;
     choice_max: number | null;
+    source_rule_item_id: string | null;
   }[];
-};
-
-type EventPackageOption = {
-  id: string;
-  event_type: string;
-  event_types: string[] | null;
-  name: string;
 };
 
 type WhatsAppConnection = {
@@ -78,7 +72,7 @@ export default async function OptionsAdminPage() {
   const { data: quoteItemOptions } = await supabase.from("quote_item_catalog").select("id,name,description,default_unit_price_cents,is_active").order("sort_order").order("name");
   const { data: eventPackages } = await supabase
     .from("event_package_catalog")
-    .select("id,event_type,event_types,name,description,base_price_cents,proposal_notes,operation_notes,event_package_items(id,category,name,description,show_in_proposal,show_in_operational_brief,is_choice,choice_group,choice_min,choice_max)")
+    .select("id,event_type,event_types,name,description,base_price_cents,proposal_notes,operation_notes,event_package_items(id,category,name,description,show_in_proposal,show_in_operational_brief,is_choice,choice_group,choice_min,choice_max,source_rule_item_id)")
     .eq("is_active", true)
     .order("event_type")
     .order("sort_order")
@@ -149,18 +143,17 @@ export default async function OptionsAdminPage() {
           <QuoteItemCatalogAccordionList options={(quoteItemOptions ?? []) as QuoteItemCatalogOption[]} />
         </AdminSection>
 
-        <AdminSection id="pacotes" title="Pacotes" count={(eventPackages ?? []).length}>
-          <EventPackageForm eventTypes={eventTypes.map((option) => ({ name: option.name }))} />
-          <EventPackageAccordionList eventTypes={eventTypes.map((option) => ({ name: option.name }))} packages={(eventPackages ?? []) as EventPackage[]} />
-        </AdminSection>
-
-        <AdminSection id="pacotes-2" title="Pacotes 2.0" count={(packageSubcategories ?? []).length + (packageLibraryItems ?? []).length + (packageRules ?? []).length}>
-          <PackageModelPanel
-            items={(packageLibraryItems ?? []) as PackageLibraryItem[]}
-            packages={(eventPackages ?? []) as EventPackageOption[]}
-            rules={(packageRules ?? []) as PackageRule[]}
-            subcategories={(packageSubcategories ?? []) as PackageSubcategory[]}
-          />
+        <AdminSection id="pacotes" title="Pacotes" count={(eventPackages ?? []).length} defaultOpen>
+          <p className="mb-4 text-sm text-slate-600">Crie um pacote, defina o valor e inclua seus itens. Para reutilizar itens ou oferecer escolhas, use a biblioteca dentro do mesmo pacote.</p>
+          <details className="rounded-lg border border-[#dbe3dc] bg-white">
+            <summary className="cursor-pointer p-4 font-semibold text-[#083653]">+ Criar pacote</summary>
+            <div className="border-t border-[#dbe3dc] p-4"><EventPackageForm eventTypes={eventTypes.map((option) => ({ name: option.name }))} /></div>
+          </details>
+          <EventPackageAccordionList eventTypes={eventTypes.map((option) => ({ name: option.name }))} packages={(eventPackages ?? []) as EventPackage[]} libraryItems={(packageLibraryItems ?? []) as PackageLibraryItem[]} rules={(packageRules ?? []) as PackageRule[]} subcategories={(packageSubcategories ?? []) as PackageSubcategory[]} />
+          <details id="pacotes-2" className="mt-5 scroll-mt-20 rounded-lg border border-[#dbe3dc] bg-white">
+            <summary className="cursor-pointer p-4 font-semibold text-[#083653]">Biblioteca de itens reutilizáveis</summary>
+            <div className="border-t border-[#dbe3dc] p-4"><PackageLibraryPanel items={(packageLibraryItems ?? []) as PackageLibraryItem[]} subcategories={(packageSubcategories ?? []) as PackageSubcategory[]} /></div>
+          </details>
         </AdminSection>
 
         <AdminSection title="Textos da proposta" count={(proposalOptions ?? []).length}>

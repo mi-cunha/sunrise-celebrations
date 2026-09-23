@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { formatCurrencyFromCents } from "@/lib/domain/quote";
+import { PackageRulesEditor, type PackageLibraryItem, type PackageRule, type PackageSubcategory } from "./package-model-forms";
 import {
   createEventPackage,
   createEventPackageItem,
@@ -43,6 +44,7 @@ type PackageItem = {
   choice_group: string | null;
   choice_min: number | null;
   choice_max: number | null;
+  source_rule_item_id: string | null;
 };
 
 export function EventPackageForm({ eventTypes }: { eventTypes: EventTypeOption[] }) {
@@ -92,7 +94,7 @@ export function EventPackageForm({ eventTypes }: { eventTypes: EventTypeOption[]
   );
 }
 
-export function EventPackageAccordionList({ eventTypes, packages }: { eventTypes: EventTypeOption[]; packages: EventPackage[] }) {
+export function EventPackageAccordionList({ eventTypes, packages, libraryItems, rules, subcategories }: { eventTypes: EventTypeOption[]; packages: EventPackage[]; libraryItems: PackageLibraryItem[]; rules: PackageRule[]; subcategories: PackageSubcategory[] }) {
   if (!packages.length) return <p className="mt-4 rounded-lg bg-[#fbf8f1] p-3 text-sm text-slate-600">Nenhum pacote cadastrado.</p>;
 
   return (
@@ -113,7 +115,8 @@ export function EventPackageAccordionList({ eventTypes, packages }: { eventTypes
             </summary>
             <div className="space-y-4 border-t border-[#dbe3dc] p-4">
               <PackageCatalogEditor eventPackage={eventPackage} eventTypes={eventTypes} />
-              <PackageItemForm packageId={eventPackage.id} />
+              <details className="rounded-lg border border-[#edf1ee] bg-white"><summary className="cursor-pointer p-4 font-semibold text-[#18352d]">Adicionar item exclusivo deste pacote</summary><div className="border-t border-[#edf1ee] p-4"><PackageItemForm packageId={eventPackage.id} /></div></details>
+              <PackageRulesEditor packageId={eventPackage.id} items={libraryItems} rules={rules} subcategories={subcategories} />
               <PackageItemsList packageId={eventPackage.id} items={eventPackage.event_package_items ?? []} />
               {(eventPackage.proposal_notes || eventPackage.operation_notes) && (
                 <div className="grid gap-3 md:grid-cols-2">
@@ -233,7 +236,7 @@ function PackageItemsList({ items, packageId }: { items: PackageItem[]; packageI
   return (
     <ul className="space-y-2">
       {items.map((item) => (
-        <PackageItemAccordion key={item.id} item={item} packageId={packageId} />
+        item.source_rule_item_id ? <li key={item.id} className="rounded-lg border border-[#edf1ee] bg-white px-3 py-2 text-sm"><span className="font-medium">{item.name}</span><span className="ml-2 text-xs text-slate-500">da biblioteca · {item.is_choice ? "escolha" : "incluso"}</span></li> : <PackageItemAccordion key={item.id} item={item} packageId={packageId} />
       ))}
     </ul>
   );
@@ -288,6 +291,7 @@ function PackageItemAccordion({ item, packageId }: { item: PackageItem; packageI
 
 function PackageItemFields({ item, packageId, state }: { item?: PackageItem; packageId: string; state?: PackageItemFormState }) {
   const currentCategory = item?.category === "comida" ? "buffet" : item?.category;
+  const [isChoice, setIsChoice] = useState(state?.isChoice != null ? state.isChoice === "on" : item?.is_choice ?? false);
   return (
     <>
       <div className="mt-4 grid gap-4 md:grid-cols-[160px_1fr]">
@@ -298,6 +302,7 @@ function PackageItemFields({ item, packageId, state }: { item?: PackageItem; pac
             <option value="bebida">Bebida</option>
             <option value="servico">Serviço</option>
             <option value="estrutura">Estrutura</option>
+            <option value="decoracao">Decoração</option>
             <option value="observacao">Observação</option>
             <option value="outro">Outro</option>
           </select>
@@ -321,6 +326,28 @@ function PackageItemFields({ item, packageId, state }: { item?: PackageItem; pac
           Aparece na ficha operacional
         </label>
       </div>
+      <div className="mt-4 rounded-lg border border-[#edf1ee] bg-[#fbf8f1] p-3">
+        <label className="!mb-0 !flex items-center gap-2 text-sm">
+          <input type="checkbox" name="isChoice" checked={isChoice} onChange={(event) => setIsChoice(event.target.checked)} className="!h-4 !w-4" />
+          O cliente escolhe este item entre opções
+        </label>
+        {isChoice && (
+          <div className="mt-3 grid gap-3 sm:grid-cols-[2fr_1fr_1fr]">
+            <div>
+              <label htmlFor={item ? `package-choice-group-${item.id}` : `package-choice-group-${packageId}`}>Nome do grupo de escolhas</label>
+              <input id={item ? `package-choice-group-${item.id}` : `package-choice-group-${packageId}`} name="choiceGroup" defaultValue={state?.choiceGroup ?? item?.choice_group ?? ""} placeholder="Ex.: Escolha de bebidas" required />
+            </div>
+            <div>
+              <label htmlFor={item ? `package-choice-min-${item.id}` : `package-choice-min-${packageId}`}>Mínimo</label>
+              <input id={item ? `package-choice-min-${item.id}` : `package-choice-min-${packageId}`} name="choiceMin" type="number" min="0" step="1" defaultValue={state?.choiceMin ?? item?.choice_min ?? 0} />
+            </div>
+            <div>
+              <label htmlFor={item ? `package-choice-max-${item.id}` : `package-choice-max-${packageId}`}>Máximo</label>
+              <input id={item ? `package-choice-max-${item.id}` : `package-choice-max-${packageId}`} name="choiceMax" type="number" min="1" step="1" defaultValue={state?.choiceMax ?? item?.choice_max ?? 1} />
+            </div>
+          </div>
+        )}
+      </div>
     </>
   );
 }
@@ -341,6 +368,7 @@ function categoryLabel(category: string) {
     bebida: "Bebida",
     servico: "Serviço",
     estrutura: "Estrutura",
+    decoracao: "Decoração",
     observacao: "Observação",
     outro: "Outro",
   };

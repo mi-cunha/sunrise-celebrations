@@ -58,7 +58,7 @@ const packageCatalogDeleteSchema = z.object({
 
 const packageItemSchema = z.object({
   packageId: z.string().uuid(),
-  category: z.enum(["buffet", "bebida", "servico", "estrutura", "observacao", "outro"]),
+  category: z.enum(["buffet", "bebida", "servico", "estrutura", "decoracao", "observacao", "outro"]),
   name: z.string().trim().min(2, "Informe o item.").max(160, "Use até 160 caracteres."),
   description: z.string().trim().max(800, "Use até 800 caracteres.").optional(),
   showInProposal: z.boolean(),
@@ -130,8 +130,20 @@ const packageRuleSchema = z
     isRequired: z.boolean(),
   })
   .superRefine((value, context) => {
+    if (value.itemIds.length === 0) {
+      context.addIssue({ code: "custom", message: "Selecione ao menos um item para este grupo.", path: ["itemIds"] });
+    }
+    if (value.selectionMin > 0 && value.selectionMax === 0) {
+      context.addIssue({ code: "custom", message: "Informe o máximo de escolhas ou use zero nos dois campos para incluir todos os itens.", path: ["selectionMax"] });
+    }
     if (value.selectionMax > 0 && value.selectionMin > value.selectionMax) {
       context.addIssue({ code: "custom", message: "O mínimo não pode ser maior que o máximo.", path: ["selectionMin"] });
+    }
+    if (value.selectionMin > value.itemIds.length) {
+      context.addIssue({ code: "custom", message: "O mínimo não pode superar a quantidade de itens marcados.", path: ["selectionMin"] });
+    }
+    if (value.selectionMax > value.itemIds.length) {
+      context.addIssue({ code: "custom", message: "O máximo não pode superar a quantidade de itens marcados.", path: ["selectionMax"] });
     }
   });
 
@@ -526,6 +538,10 @@ export async function attachPackageRuleItem(_: PackageModelFormState, formData: 
 
   const { supabase, permissions } = await requireUser();
   if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
+
+  const { data: rule } = await supabase.from("event_package_rules").select("subcategory_id").eq("id", parsed.data.ruleId).maybeSingle();
+  const { data: item } = await supabase.from("event_package_item_catalog").select("subcategory_id").eq("id", parsed.data.itemId).maybeSingle();
+  if (!rule || !item || rule.subcategory_id !== item.subcategory_id) return { error: "Escolha um item da mesma subcategoria da regra.", ruleId: raw.ruleId, itemId: raw.itemId };
 
   const { error } = await supabase.from("event_package_rule_items").insert({
     package_rule_id: parsed.data.ruleId,

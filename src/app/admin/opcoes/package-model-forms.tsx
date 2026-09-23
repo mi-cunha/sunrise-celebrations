@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useId, useState } from "react";
 import type { ReactNode } from "react";
 import {
   attachPackageRuleItem,
@@ -50,38 +50,38 @@ export type PackageRule = {
   event_package_rule_items: { id: string; event_package_item_catalog: { id: string; name: string }[] | { id: string; name: string } | null }[];
 };
 
-type PackageOption = {
-  id: string;
-  name: string;
-  event_type: string;
-  event_types: string[] | null;
-};
-
-export function PackageModelPanel({
-  items,
-  packages,
-  rules,
-  subcategories,
-}: {
-  items: PackageLibraryItem[];
-  packages: PackageOption[];
-  rules: PackageRule[];
-  subcategories: PackageSubcategory[];
-}) {
+export function PackageLibraryPanel({ items, subcategories }: { items: PackageLibraryItem[]; subcategories: PackageSubcategory[] }) {
   return (
     <div className="space-y-4">
-      <p className="rounded-lg bg-[#dcecf6]/60 p-3 text-sm text-[#083653]">
-        Nova estrutura: cadastre subcategorias, crie itens reutilizáveis e monte cada pacote por regras de escolha.
-      </p>
-      <div className="grid gap-4 xl:grid-cols-3">
+      <p className="text-sm text-slate-600">Organize itens por categoria e subcategoria. Depois, abra um pacote para incluí-los ou oferecer escolhas ao cliente.</p>
+      <div className="grid gap-4 lg:grid-cols-2">
         <PackageSubcategoryForm />
         <PackageLibraryItemForm subcategories={subcategories} />
-        <PackageRuleForm items={items} packages={packages} subcategories={subcategories} />
       </div>
-      <PackageRuleItemForm items={items} rules={rules} />
-      <PackageModelSummary items={items} rules={rules} subcategories={subcategories} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <SummaryCard title="Subcategorias" empty="Nenhuma subcategoria cadastrada.">
+          {subcategories.map((subcategory) => <li key={subcategory.id} className="rounded-lg border border-[#edf1ee] bg-white px-3 py-2 text-sm"><span className="font-semibold">{categoryLabel(subcategory.category)}</span> › {subcategory.name}</li>)}
+        </SummaryCard>
+        <SummaryCard title="Itens da biblioteca" empty="Nenhum item cadastrado.">
+          {items.map((item) => <li key={item.id} className="rounded-lg border border-[#edf1ee] bg-white px-3 py-2 text-sm"><span className="font-semibold">{item.name}</span><span className="block text-xs text-[#5f7180]">{packageItemSubcategoryLabel(item) || "Sem subcategoria"}</span></li>)}
+        </SummaryCard>
+      </div>
     </div>
   );
+}
+
+export function PackageRulesEditor({ packageId, items, rules, subcategories }: { packageId: string; items: PackageLibraryItem[]; rules: PackageRule[]; subcategories: PackageSubcategory[] }) {
+  const packageRules = rules.filter((rule) => rule.package_id === packageId);
+  return <details className="rounded-lg border border-[#edf1ee] bg-white">
+    <summary className="cursor-pointer p-4 font-semibold text-[#18352d]">Itens reutilizáveis e escolhas ({packageRules.length})</summary>
+    <div className="space-y-4 border-t border-[#edf1ee] p-4">
+      <p className="text-sm text-slate-600">Escolha uma subcategoria, marque os itens e defina quantos o cliente poderá escolher. Mínimo e máximo iguais a zero incluem todos os itens.</p>
+      {packageRules.length > 0 && <ul className="grid gap-2 sm:grid-cols-2">{packageRules.map((rule) => <li key={rule.id} className="rounded-lg border border-[#edf1ee] bg-[#fbf8f1] p-3 text-sm"><strong>{rule.title || packageRuleSubcategoryLabel(rule)}</strong><span className="block text-slate-600">{ruleInstruction(rule)} · {rule.event_package_rule_items.length} item(ns)</span></li>)}</ul>}
+      {subcategories.length === 0 && <p className="rounded-lg bg-[#fff5e6] p-3 text-sm">Crie uma subcategoria na biblioteca abaixo para começar.</p>}
+      <PackageRuleForm items={items} packageId={packageId} subcategories={subcategories} />
+      {packageRules.length > 0 && <details className="rounded-lg border border-[#edf1ee] p-3"><summary className="cursor-pointer text-sm font-semibold">Acrescentar item a uma escolha existente</summary><div className="mt-3"><PackageRuleItemForm items={items} rules={packageRules} /></div></details>}
+    </div>
+  </details>;
 }
 
 function PackageSubcategoryForm() {
@@ -161,26 +161,19 @@ function PackageLibraryItemForm({ subcategories }: { subcategories: PackageSubca
   );
 }
 
-function PackageRuleForm({ items, packages, subcategories }: { items: PackageLibraryItem[]; packages: PackageOption[]; subcategories: PackageSubcategory[] }) {
+function PackageRuleForm({ items, packageId, subcategories }: { items: PackageLibraryItem[]; packageId: string; subcategories: PackageSubcategory[] }) {
+  const formId = useId();
   const [state, action, pending] = useActionState(createPackageRule, initialState);
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState(state.subcategoryId ?? "");
   const availableItems = selectedSubcategoryId ? items.filter((item) => firstRecord(item.event_package_subcategories)?.id === selectedSubcategoryId) : [];
   return (
     <form action={action} className="rounded-lg border border-[#d9ded8] bg-white p-3">
-      <h3 className="text-sm font-semibold text-[#083653]">3. Regra no pacote</h3>
+      <h3 className="text-sm font-semibold text-[#083653]">Adicionar grupo de itens ao pacote</h3>
+      <input type="hidden" name="packageId" value={packageId} />
       <div className="mt-3 space-y-3">
         <div>
-          <label htmlFor="rule-package">Pacote</label>
-          <select id="rule-package" name="packageId" defaultValue={state.packageId ?? ""} required>
-            <option value="">Selecione</option>
-            {packages.map((eventPackage) => (
-              <option key={eventPackage.id} value={eventPackage.id}>{eventPackage.name}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="rule-subcategory">Subcategoria</label>
-          <select id="rule-subcategory" name="subcategoryId" value={selectedSubcategoryId} onChange={(event) => setSelectedSubcategoryId(event.currentTarget.value)} required>
+          <label htmlFor={`${formId}-subcategory`}>Subcategoria</label>
+          <select id={`${formId}-subcategory`} name="subcategoryId" value={selectedSubcategoryId} onChange={(event) => setSelectedSubcategoryId(event.currentTarget.value)} required>
             <option value="">Selecione</option>
             {subcategories.map((subcategory) => (
               <option key={subcategory.id} value={subcategory.id}>{categoryLabel(subcategory.category)} › {subcategory.name}</option>
@@ -188,17 +181,17 @@ function PackageRuleForm({ items, packages, subcategories }: { items: PackageLib
           </select>
         </div>
         <div>
-          <label htmlFor="rule-title">Título na proposta</label>
-          <input id="rule-title" name="title" defaultValue={state.title ?? ""} placeholder="Ex.: Escolha os sabores de suco" />
+          <label htmlFor={`${formId}-title`}>Título na proposta</label>
+          <input id={`${formId}-title`} name="title" defaultValue={state.title ?? ""} placeholder="Ex.: Escolha os sabores de suco" />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label htmlFor="rule-min">Mín.</label>
-            <input id="rule-min" name="selectionMin" type="number" min="0" defaultValue={state.selectionMin ?? ""} placeholder="0" />
+            <label htmlFor={`${formId}-min`}>Mín.</label>
+            <input id={`${formId}-min`} name="selectionMin" type="number" min="0" defaultValue={state.selectionMin ?? 0} />
           </div>
           <div>
-            <label htmlFor="rule-max">Máx.</label>
-            <input id="rule-max" name="selectionMax" type="number" min="0" defaultValue={state.selectionMax ?? ""} placeholder="Ex.: 3" />
+            <label htmlFor={`${formId}-max`}>Máx.</label>
+            <input id={`${formId}-max`} name="selectionMax" type="number" min="0" defaultValue={state.selectionMax ?? 0} />
           </div>
         </div>
         <label className="!mb-0 !flex items-center gap-2 text-sm">
@@ -225,22 +218,26 @@ function PackageRuleForm({ items, packages, subcategories }: { items: PackageLib
         </div>
       </div>
       <FormMessage state={state} />
-      <button disabled={pending || packages.length === 0 || subcategories.length === 0} className="mt-3 rounded-lg bg-[#083653] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
-        {pending ? "Salvando..." : "Criar regra"}
+      <button disabled={pending || availableItems.length === 0} className="mt-3 rounded-lg bg-[#083653] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
+        {pending ? "Salvando..." : "Adicionar ao pacote"}
       </button>
     </form>
   );
 }
 
 function PackageRuleItemForm({ items, rules }: { items: PackageLibraryItem[]; rules: PackageRule[] }) {
+  const formId = useId();
   const [state, action, pending] = useActionState(attachPackageRuleItem, initialState);
+  const [selectedRuleId, setSelectedRuleId] = useState(state.ruleId ?? "");
+  const selectedRule = rules.find((rule) => rule.id === selectedRuleId);
+  const availableItems = selectedRule ? items.filter((item) => firstRecord(item.event_package_subcategories)?.id === selectedRule.subcategory_id) : [];
   return (
     <form action={action} className="rounded-lg border border-[#d9ded8] bg-white p-3">
-      <h3 className="text-sm font-semibold text-[#083653]">4. Associar item à regra do pacote</h3>
+      <h3 className="text-sm font-semibold text-[#083653]">Acrescentar item</h3>
       <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
         <div>
-          <label htmlFor="rule-item-rule">Regra</label>
-          <select id="rule-item-rule" name="ruleId" defaultValue={state.ruleId ?? ""} required>
+          <label htmlFor={`${formId}-rule`}>Regra</label>
+          <select id={`${formId}-rule`} name="ruleId" value={selectedRuleId} onChange={(event) => setSelectedRuleId(event.currentTarget.value)} required>
             <option value="">Selecione</option>
             {rules.map((rule) => (
               <option key={rule.id} value={rule.id}>
@@ -250,53 +247,22 @@ function PackageRuleItemForm({ items, rules }: { items: PackageLibraryItem[]; ru
           </select>
         </div>
         <div>
-          <label htmlFor="rule-item-item">Item</label>
-          <select id="rule-item-item" name="itemId" defaultValue={state.itemId ?? ""} required>
-            <option value="">Selecione</option>
-            {items.map((item) => (
+          <label htmlFor={`${formId}-item`}>Item</label>
+          <select key={selectedRuleId} id={`${formId}-item`} name="itemId" defaultValue="" required disabled={!selectedRule}>
+            <option value="">{selectedRule ? "Selecione" : "Escolha primeiro a regra"}</option>
+            {availableItems.map((item) => (
               <option key={item.id} value={item.id}>
                 {packageItemSubcategoryLabel(item)}{item.name}
               </option>
             ))}
           </select>
         </div>
-        <button disabled={pending || rules.length === 0 || items.length === 0} className="rounded-lg bg-[#083653] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
+        <button disabled={pending || !selectedRule || availableItems.length === 0} className="rounded-lg bg-[#083653] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
           {pending ? "Associando..." : "Associar"}
         </button>
       </div>
       <FormMessage state={state} />
     </form>
-  );
-}
-
-function PackageModelSummary({ items, rules, subcategories }: { items: PackageLibraryItem[]; rules: PackageRule[]; subcategories: PackageSubcategory[] }) {
-  return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      <SummaryCard title="Subcategorias" empty="Nenhuma subcategoria cadastrada.">
-        {subcategories.map((subcategory) => (
-          <li key={subcategory.id} className="rounded-lg border border-[#edf1ee] bg-white px-3 py-2 text-sm">
-            <span className="font-semibold">{categoryLabel(subcategory.category)}</span> › {subcategory.name}
-          </li>
-        ))}
-      </SummaryCard>
-      <SummaryCard title="Itens" empty="Nenhum item cadastrado.">
-        {items.map((item) => (
-          <li key={item.id} className="rounded-lg border border-[#edf1ee] bg-white px-3 py-2 text-sm">
-            <span className="font-semibold">{item.name}</span>
-            <span className="block text-xs text-[#5f7180]">{packageItemSubcategoryLabel(item) || "Sem subcategoria"}</span>
-          </li>
-        ))}
-      </SummaryCard>
-      <SummaryCard title="Regras por pacote" empty="Nenhuma regra cadastrada.">
-        {rules.map((rule) => (
-          <li key={rule.id} className="rounded-lg border border-[#edf1ee] bg-white px-3 py-2 text-sm">
-            <span className="font-semibold">{packageRulePackageName(rule)}</span>
-            <span className="block text-xs text-[#5f7180]">{packageRuleSubcategoryLabel(rule)} · {ruleInstruction(rule)}</span>
-            <span className="mt-1 block text-xs text-[#5f7180]">{rule.event_package_rule_items.length} item(ns) associado(s)</span>
-          </li>
-        ))}
-      </SummaryCard>
-    </div>
   );
 }
 
