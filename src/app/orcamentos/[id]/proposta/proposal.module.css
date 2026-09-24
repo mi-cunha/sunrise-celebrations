@@ -26,6 +26,7 @@
 .pricing { border: 1px solid #dce5ec; border-radius: 5px; overflow-x: auto; }
 .pricing > div > div { grid-template-columns: minmax(0, 1fr) 42px 90px 96px; padding: 9px 12px; gap: 10px; font-size: 12px; }
 .pricing p { overflow-wrap: anywhere; }
+.pricingSection { break-inside: avoid-page; page-break-inside: avoid; }
 .total { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 18px; margin-top: 14px; color: white; background: #0b2742; border-radius: 5px; break-inside: avoid; }
 .total p:first-child { font-size: 11px; }
 .total p:last-child { margin: 0; font-size: 28px; white-space: nowrap; }
@@ -58,6 +59,7 @@
   .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .twoColumns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .package { break-inside: auto; }
+  .pricingSection { break-inside: avoid-page; page-break-inside: avoid; }
   .pricing { overflow: visible; }
   .pricing > div { min-width: 0; }
   .pricing > div > div { break-inside: avoid; }

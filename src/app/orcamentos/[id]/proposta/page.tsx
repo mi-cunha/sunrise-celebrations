@@ -237,42 +237,42 @@ export default async function QuoteProposalPage({ params }: { params: Promise<{ 
               </section>
             )}
 
-            {(items.length > 0 || selectedPackage?.event_package_catalog) && <div className={styles.pricing}>
-              <div className="min-w-[680px] print:min-w-0">
-                <div className="grid grid-cols-[1fr_80px_120px_120px] gap-3 bg-[#f3f8fc] px-5 py-3 text-sm font-semibold text-[#1f5f8b]">
-                  <p>Item</p>
-                  <p>Qtd.</p>
-                  <p>Unitário</p>
-                  <p className="text-right">Subtotal</p>
+            <section className={styles.pricingSection}>
+              {(items.length > 0 || selectedPackage?.event_package_catalog) && <div className={styles.pricing}>
+                <div className="min-w-[680px] print:min-w-0">
+                  <div className="grid grid-cols-[1fr_80px_120px_120px] gap-3 bg-[#f3f8fc] px-5 py-3 text-sm font-semibold text-[#1f5f8b]">
+                    <p>Item</p>
+                    <p>Qtd.</p>
+                    <p>Unitário</p>
+                    <p className="text-right">Subtotal</p>
+                  </div>
+                  {selectedPackage?.event_package_catalog && <div className="grid grid-cols-[1fr_80px_120px_120px] gap-3 border-t border-[#eadfce] px-5 py-4 text-sm print:break-inside-avoid">
+                    <p className="font-medium">Pacote {selectedPackage.event_package_catalog.name}</p>
+                    <p>{selectedPackage.guest_count.toLocaleString("pt-BR")}</p>
+                    <p>{formatCurrencyFromCents(selectedPackage.unit_price_cents)}</p>
+                    <p className="text-right font-semibold">{formatCurrencyFromCents(selectedPackage.total_price_cents)}</p>
+                  </div>}
+                  {items.length ? (
+                    items.map((item) => {
+                      const quantity = Number(item.quantity);
+                      return (
+                        <div key={item.id} className="grid grid-cols-[1fr_80px_120px_120px] gap-3 border-t border-[#eadfce] px-5 py-4 text-sm print:break-inside-avoid">
+                          <p className="font-medium">{item.description}</p>
+                          <p>{quantity.toLocaleString("pt-BR")}</p>
+                          <p>{formatCurrencyFromCents(item.unit_price_cents)}</p>
+                          <p className="text-right font-semibold">{formatCurrencyFromCents(Math.round(quantity * item.unit_price_cents))}</p>
+                        </div>
+                      );
+                    })
+                  ) : null}
                 </div>
-                {selectedPackage?.event_package_catalog && <div className="grid grid-cols-[1fr_80px_120px_120px] gap-3 border-t border-[#eadfce] px-5 py-4 text-sm print:break-inside-avoid">
-                  <p className="font-medium">Pacote {selectedPackage.event_package_catalog.name}</p>
-                  <p>{selectedPackage.guest_count.toLocaleString("pt-BR")}</p>
-                  <p>{formatCurrencyFromCents(selectedPackage.unit_price_cents)}</p>
-                  <p className="text-right font-semibold">{formatCurrencyFromCents(selectedPackage.total_price_cents)}</p>
-                </div>}
-                {items.length ? (
-                  items.map((item) => {
-                    const quantity = Number(item.quantity);
-                    return (
-                      <div key={item.id} className="grid grid-cols-[1fr_80px_120px_120px] gap-3 border-t border-[#eadfce] px-5 py-4 text-sm print:break-inside-avoid">
-                        <p className="font-medium">{item.description}</p>
-                        <p>{quantity.toLocaleString("pt-BR")}</p>
-                        <p>{formatCurrencyFromCents(item.unit_price_cents)}</p>
-                        <p className="text-right font-semibold">{formatCurrencyFromCents(Math.round(quantity * item.unit_price_cents))}</p>
-                      </div>
-                    );
-                  })
-                ) : (
-                  null
-                )}
-              </div>
-            </div>}
+              </div>}
 
-            <div className={styles.total}>
-              <p className="text-sm uppercase tracking-[0.18em] text-[#b8d8f2]">Investimento total</p>
-              <p className="mt-2 text-4xl font-semibold">{formatCurrencyFromCents(detail.total_amount_cents)}</p>
-            </div>
+              <div className={styles.total}>
+                <p className="text-sm uppercase tracking-[0.18em] text-[#b8d8f2]">Investimento total</p>
+                <p className="mt-2 text-4xl font-semibold">{formatCurrencyFromCents(detail.total_amount_cents)}</p>
+              </div>
+            </section>
 
             {detail.notes?.trim() && <section className={styles.notes}><h2>Observações</h2><p>{detail.notes}</p></section>}
             <section className={styles.conditions}>
