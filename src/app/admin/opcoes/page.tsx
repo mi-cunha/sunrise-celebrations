@@ -86,7 +86,7 @@ export default async function OptionsAdminPage() {
     .order("name");
   const { data: packageLibraryItems } = await supabase
     .from("event_package_item_catalog")
-    .select("id,name,proposal_description,operational_description,event_package_subcategories(id,category,name)")
+    .select("id,name,proposal_description,operational_description,show_in_proposal,show_in_operational_brief,event_package_subcategories(id,category,name)")
     .eq("is_active", true)
     .order("sort_order")
     .order("name");

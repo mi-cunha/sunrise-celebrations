@@ -7,6 +7,10 @@ import {
   createPackageLibraryItem,
   createPackageRule,
   createPackageSubcategory,
+  removePackageLibraryItem,
+  removePackageSubcategory,
+  updatePackageLibraryItem,
+  updatePackageSubcategory,
   type PackageModelFormState,
 } from "./actions";
 
@@ -34,6 +38,8 @@ export type PackageLibraryItem = {
   name: string;
   proposal_description: string | null;
   operational_description: string | null;
+  show_in_proposal: boolean;
+  show_in_operational_brief: boolean;
   event_package_subcategories: { id: string; category: string; name: string }[] | { id: string; category: string; name: string } | null;
 };
 
@@ -60,13 +66,118 @@ export function PackageLibraryPanel({ items, subcategories }: { items: PackageLi
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <SummaryCard title="Subcategorias" empty="Nenhuma subcategoria cadastrada.">
-          {subcategories.map((subcategory) => <li key={subcategory.id} className="rounded-lg border border-[#edf1ee] bg-white px-3 py-2 text-sm"><span className="font-semibold">{categoryLabel(subcategory.category)}</span> › {subcategory.name}</li>)}
+          {subcategories.map((subcategory) => <PackageSubcategoryAccordion key={subcategory.id} subcategory={subcategory} />)}
         </SummaryCard>
         <SummaryCard title="Itens da biblioteca" empty="Nenhum item cadastrado.">
-          {items.map((item) => <li key={item.id} className="rounded-lg border border-[#edf1ee] bg-white px-3 py-2 text-sm"><span className="font-semibold">{item.name}</span><span className="block text-xs text-[#5f7180]">{packageItemSubcategoryLabel(item) || "Sem subcategoria"}</span></li>)}
+          {items.map((item) => <PackageLibraryItemAccordion key={item.id} item={item} subcategories={subcategories} />)}
         </SummaryCard>
       </div>
     </div>
+  );
+}
+
+function PackageSubcategoryAccordion({ subcategory }: { subcategory: PackageSubcategory }) {
+  const [updateState, updateAction, updatePending] = useActionState(updatePackageSubcategory, initialState);
+  const [removeState, removeAction, removePending] = useActionState(removePackageSubcategory, initialState);
+  const updateMessage = updateState.id === subcategory.id ? updateState.error ?? updateState.success : undefined;
+  const removeMessage = removeState.id === subcategory.id ? removeState.error ?? removeState.success : undefined;
+  const values = updateState.id === subcategory.id ? updateState : undefined;
+
+  return (
+    <li>
+      <details className="rounded-lg border border-[#edf1ee] bg-white">
+        <summary className="cursor-pointer list-none px-3 py-2 text-sm transition hover:bg-[#f6f0e5]">
+          <span className="font-semibold">{categoryLabel(subcategory.category)}</span> › {subcategory.name}
+          <span className="ml-2 text-xs text-[#5f7180]">Editar ou excluir</span>
+        </summary>
+        <div className="border-t border-[#edf1ee] p-3">
+          <form action={updateAction}>
+            <input type="hidden" name="id" value={subcategory.id} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label htmlFor={`subcategory-category-${subcategory.id}`}>Categoria</label>
+                <select id={`subcategory-category-${subcategory.id}`} name="category" defaultValue={values?.category ?? subcategory.category}>
+                  {packageCategories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor={`subcategory-name-${subcategory.id}`}>Subcategoria</label>
+                <input id={`subcategory-name-${subcategory.id}`} name="name" defaultValue={values?.name ?? subcategory.name} required />
+              </div>
+            </div>
+            <div className="mt-3">
+              <label htmlFor={`subcategory-description-${subcategory.id}`}>Descrição interna</label>
+              <textarea id={`subcategory-description-${subcategory.id}`} name="description" rows={2} defaultValue={values?.description ?? subcategory.description ?? ""} />
+            </div>
+            {updateMessage && <p role="status" className={`mt-3 rounded-lg p-3 text-sm ${updateState.error ? "bg-red-50 text-red-800" : "bg-[#edf5ee] text-[#356451]"}`}>{updateMessage}</p>}
+            <button disabled={updatePending} className="mt-3 rounded-lg bg-[#083653] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{updatePending ? "Salvando..." : "Salvar subcategoria"}</button>
+          </form>
+          <form action={removeAction} onSubmit={(event) => { if (!window.confirm(`Remover a subcategoria “${subcategory.name}”? Os itens precisam ser removidos antes.`)) event.preventDefault(); }} className="mt-3 border-t border-[#edf1ee] pt-3">
+            <input type="hidden" name="id" value={subcategory.id} />
+            {removeMessage && <p role="status" className={`mb-3 rounded-lg p-3 text-sm ${removeState.error ? "bg-red-50 text-red-800" : "bg-[#edf5ee] text-[#356451]"}`}>{removeMessage}</p>}
+            <button disabled={removePending} className="rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60">{removePending ? "Removendo..." : "Remover subcategoria"}</button>
+          </form>
+        </div>
+      </details>
+    </li>
+  );
+}
+
+function PackageLibraryItemAccordion({ item, subcategories }: { item: PackageLibraryItem; subcategories: PackageSubcategory[] }) {
+  const [updateState, updateAction, updatePending] = useActionState(updatePackageLibraryItem, initialState);
+  const [removeState, removeAction, removePending] = useActionState(removePackageLibraryItem, initialState);
+  const updateMessage = updateState.id === item.id ? updateState.error ?? updateState.success : undefined;
+  const removeMessage = removeState.id === item.id ? removeState.error ?? removeState.success : undefined;
+  const values = updateState.id === item.id ? updateState : undefined;
+  const currentSubcategory = firstRecord(item.event_package_subcategories);
+
+  return (
+    <li>
+      <details className="rounded-lg border border-[#edf1ee] bg-white">
+        <summary className="cursor-pointer list-none px-3 py-2 text-sm transition hover:bg-[#f6f0e5]">
+          <span className="font-semibold">{item.name}</span>
+          <span className="block text-xs text-[#5f7180]">{packageItemSubcategoryLabel(item) || "Sem subcategoria"}Editar ou excluir</span>
+        </summary>
+        <div className="border-t border-[#edf1ee] p-3">
+          <form action={updateAction}>
+            <input type="hidden" name="id" value={item.id} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label htmlFor={`library-item-subcategory-${item.id}`}>Categoria / subcategoria</label>
+                <select id={`library-item-subcategory-${item.id}`} name="subcategoryId" defaultValue={values?.subcategoryId ?? currentSubcategory?.id ?? ""} required>
+                  {subcategories.map((subcategory) => <option key={subcategory.id} value={subcategory.id}>{categoryLabel(subcategory.category)} › {subcategory.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor={`library-item-name-${item.id}`}>Item</label>
+                <input id={`library-item-name-${item.id}`} name="name" defaultValue={values?.name ?? item.name} required />
+              </div>
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div>
+                <label htmlFor={`library-item-proposal-${item.id}`}>Texto para proposta</label>
+                <textarea id={`library-item-proposal-${item.id}`} name="proposalDescription" rows={2} defaultValue={values?.proposalDescription ?? item.proposal_description ?? ""} />
+              </div>
+              <div>
+                <label htmlFor={`library-item-operational-${item.id}`}>Texto para ficha operacional</label>
+                <textarea id={`library-item-operational-${item.id}`} name="operationalDescription" rows={2} defaultValue={values?.operationalDescription ?? item.operational_description ?? ""} />
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-3">
+              <label className="!mb-0 !flex items-center gap-2 text-sm"><input type="checkbox" name="showInProposal" defaultChecked={values?.showInProposal ?? item.show_in_proposal} className="!h-4 !w-4" />Proposta</label>
+              <label className="!mb-0 !flex items-center gap-2 text-sm"><input type="checkbox" name="showInOperationalBrief" defaultChecked={values?.showInOperationalBrief ?? item.show_in_operational_brief} className="!h-4 !w-4" />Ficha</label>
+            </div>
+            {updateMessage && <p role="status" className={`mt-3 rounded-lg p-3 text-sm ${updateState.error ? "bg-red-50 text-red-800" : "bg-[#edf5ee] text-[#356451]"}`}>{updateMessage}</p>}
+            <button disabled={updatePending} className="mt-3 rounded-lg bg-[#083653] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{updatePending ? "Salvando..." : "Salvar item"}</button>
+          </form>
+          <form action={removeAction} onSubmit={(event) => { if (!window.confirm(`Remover “${item.name}” da biblioteca? Ele deixará de ser usado em novos pacotes, sem alterar orçamentos existentes.`)) event.preventDefault(); }} className="mt-3 border-t border-[#edf1ee] pt-3">
+            <input type="hidden" name="id" value={item.id} />
+            {removeMessage && <p role="status" className={`mb-3 rounded-lg p-3 text-sm ${removeState.error ? "bg-red-50 text-red-800" : "bg-[#edf5ee] text-[#356451]"}`}>{removeMessage}</p>}
+            <button disabled={removePending} className="rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60">{removePending ? "Removendo..." : "Remover item"}</button>
+          </form>
+        </div>
+      </details>
+    </li>
   );
 }
 

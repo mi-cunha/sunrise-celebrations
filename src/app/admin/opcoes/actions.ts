@@ -109,6 +109,18 @@ const packageLibraryItemSchema = z.object({
   showInOperationalBrief: z.boolean(),
 });
 
+const packageSubcategoryUpdateSchema = packageSubcategorySchema.extend({
+  id: z.string().uuid(),
+});
+
+const packageLibraryItemUpdateSchema = packageLibraryItemSchema.extend({
+  id: z.string().uuid(),
+});
+
+const packageModelDeleteSchema = z.object({
+  id: z.string().uuid(),
+});
+
 const packageRuleSchema = z
   .object({
     packageId: z.string().uuid(),
@@ -158,7 +170,7 @@ export type ProposalOptionFormState = { error?: string; success?: string; title?
 export type QuoteItemCatalogOptionFormState = { error?: string; success?: string; name?: string; description?: string; defaultUnitPrice?: string };
 export type PackageCatalogFormState = { error?: string; success?: string; id?: string; eventType?: string; eventTypes?: string[]; name?: string; description?: string; basePrice?: string; proposalNotes?: string; operationNotes?: string };
 export type PackageItemFormState = { error?: string; success?: string; packageId?: string; category?: string; name?: string; description?: string; isChoice?: string; choiceGroup?: string; choiceMin?: string; choiceMax?: string };
-export type PackageModelFormState = { error?: string; success?: string; id?: string; category?: string; subcategoryId?: string; packageId?: string; ruleId?: string; itemId?: string; name?: string; description?: string; proposalDescription?: string; operationalDescription?: string; title?: string; selectionMin?: string; selectionMax?: string };
+export type PackageModelFormState = { error?: string; success?: string; id?: string; category?: string; subcategoryId?: string; packageId?: string; ruleId?: string; itemId?: string; name?: string; description?: string; proposalDescription?: string; operationalDescription?: string; showInProposal?: boolean; showInOperationalBrief?: boolean; title?: string; selectionMin?: string; selectionMax?: string };
 export type CatalogMutationState = { error?: string; success?: string; id?: string };
 
 export async function createOption(_: OptionFormState, formData: FormData): Promise<OptionFormState> {
@@ -475,6 +487,142 @@ export async function createPackageLibraryItem(_: PackageModelFormState, formDat
 
   revalidatePath("/admin/opcoes");
   return { success: "Item criado na biblioteca." };
+}
+
+export async function updatePackageSubcategory(_: PackageModelFormState, formData: FormData): Promise<PackageModelFormState> {
+  const raw = {
+    id: String(formData.get("id") ?? ""),
+    category: String(formData.get("category") ?? ""),
+    name: String(formData.get("name") ?? ""),
+    description: String(formData.get("description") ?? ""),
+  };
+  const parsed = packageSubcategoryUpdateSchema.safeParse(raw);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revise a subcategoria.", ...raw };
+
+  const { supabase, permissions } = await requireUser();
+  if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
+
+  const { data: previous, error: previousError } = await supabase
+    .from("event_package_subcategories")
+    .select("category")
+    .eq("id", parsed.data.id)
+    .maybeSingle();
+  if (previousError || !previous) return { error: "Subcategoria não encontrada.", ...raw };
+
+  const { error } = await supabase
+    .from("event_package_subcategories")
+    .update({
+      category: parsed.data.category,
+      name: parsed.data.name,
+      description: parsed.data.description || null,
+    })
+    .eq("id", parsed.data.id);
+  if (error) return { error: error.code === "23505" ? "Essa subcategoria já existe nessa categoria." : "Não foi possível atualizar a subcategoria.", ...raw };
+
+  if (previous.category !== parsed.data.category) {
+    const { data: rules } = await supabase
+      .from("event_package_rules")
+      .select("id")
+      .eq("subcategory_id", parsed.data.id);
+    const ruleIds = (rules ?? []).map((rule) => rule.id);
+    if (ruleIds.length) {
+      const { data: ruleItems } = await supabase
+        .from("event_package_rule_items")
+        .select("id")
+        .in("package_rule_id", ruleIds);
+      const ruleItemIds = (ruleItems ?? []).map((item) => item.id);
+      if (ruleItemIds.length) {
+        await supabase
+          .from("event_package_items")
+          .update({ category: parsed.data.category })
+          .in("source_rule_item_id", ruleItemIds);
+      }
+    }
+  }
+
+  revalidatePath("/admin/opcoes");
+  revalidatePath("/orcamentos/[id]", "page");
+  revalidatePath("/orcamentos/[id]/proposta", "page");
+  return { success: "Subcategoria atualizada.", id: parsed.data.id };
+}
+
+export async function removePackageSubcategory(_: PackageModelFormState, formData: FormData): Promise<PackageModelFormState> {
+  const id = String(formData.get("id") ?? "");
+  const parsed = packageModelDeleteSchema.safeParse({ id });
+  if (!parsed.success) return { error: "Não foi possível identificar a subcategoria.", id };
+
+  const { supabase, permissions } = await requireUser();
+  if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
+
+  const { count, error: countError } = await supabase
+    .from("event_package_item_catalog")
+    .select("id", { count: "exact", head: true })
+    .eq("subcategory_id", parsed.data.id)
+    .eq("is_active", true);
+  if (countError) return { error: "Não foi possível verificar os itens da subcategoria.", id: parsed.data.id };
+  if (count) return { error: "Remova ou desative os itens desta subcategoria antes de excluí-la.", id: parsed.data.id };
+
+  const { error } = await supabase
+    .from("event_package_subcategories")
+    .update({ is_active: false })
+    .eq("id", parsed.data.id);
+  if (error) return { error: "Não foi possível remover a subcategoria.", id: parsed.data.id };
+
+  revalidatePath("/admin/opcoes");
+  return { success: "Subcategoria removida da biblioteca.", id: parsed.data.id };
+}
+
+export async function updatePackageLibraryItem(_: PackageModelFormState, formData: FormData): Promise<PackageModelFormState> {
+  const raw = {
+    id: String(formData.get("id") ?? ""),
+    subcategoryId: String(formData.get("subcategoryId") ?? ""),
+    name: String(formData.get("name") ?? ""),
+    proposalDescription: String(formData.get("proposalDescription") ?? ""),
+    operationalDescription: String(formData.get("operationalDescription") ?? ""),
+    showInProposal: formData.get("showInProposal") === "on",
+    showInOperationalBrief: formData.get("showInOperationalBrief") === "on",
+  };
+  const parsed = packageLibraryItemUpdateSchema.safeParse(raw);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revise o item.", ...raw };
+
+  const { supabase, permissions } = await requireUser();
+  if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
+
+  const { error } = await supabase
+    .from("event_package_item_catalog")
+    .update({
+      subcategory_id: parsed.data.subcategoryId,
+      name: parsed.data.name,
+      proposal_description: parsed.data.proposalDescription || null,
+      operational_description: parsed.data.operationalDescription || null,
+      show_in_proposal: parsed.data.showInProposal,
+      show_in_operational_brief: parsed.data.showInOperationalBrief,
+    })
+    .eq("id", parsed.data.id);
+  if (error) return { error: error.code === "23505" ? "Esse item já existe nessa subcategoria." : "Não foi possível atualizar o item.", ...raw };
+
+  revalidatePath("/admin/opcoes");
+  revalidatePath("/orcamentos/[id]", "page");
+  revalidatePath("/orcamentos/[id]/proposta", "page");
+  return { success: "Item da biblioteca atualizado.", id: parsed.data.id };
+}
+
+export async function removePackageLibraryItem(_: PackageModelFormState, formData: FormData): Promise<PackageModelFormState> {
+  const id = String(formData.get("id") ?? "");
+  const parsed = packageModelDeleteSchema.safeParse({ id });
+  if (!parsed.success) return { error: "Não foi possível identificar o item.", id };
+
+  const { supabase, permissions } = await requireUser();
+  if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
+
+  const { error } = await supabase
+    .from("event_package_item_catalog")
+    .update({ is_active: false })
+    .eq("id", parsed.data.id);
+  if (error) return { error: "Não foi possível remover o item da biblioteca.", id: parsed.data.id };
+
+  revalidatePath("/admin/opcoes");
+  return { success: "Item removido da biblioteca.", id: parsed.data.id };
 }
 
 export async function createPackageRule(_: PackageModelFormState, formData: FormData): Promise<PackageModelFormState> {
