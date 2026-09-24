@@ -1,0 +1,68 @@
+.proposal { font-size: 14px; line-height: 1.5; }
+.document { max-width: 896px; margin: auto; background: white; border: 1px solid #e3e7ec; border-radius: 12px; overflow: hidden; }
+.header { position: relative; overflow: hidden; padding: 22px 32px; color: white; background: #0b2742; }
+.header > div:last-child { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.header img { max-height: 64px; max-width: 170px; object-fit: contain; }
+.header h1 { margin: 0; font-size: 27px; line-height: 1.2; font-weight: 600; }
+.client { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; padding: 22px 32px 18px; border-bottom: 1px solid #e6dccb; }
+.client h2 { margin: 4px 0; font-size: 23px; }
+.client > div:last-child { padding: 0; background: none; border-radius: 0; text-align: right; }
+.client p { margin-top: 3px; font-size: 12px; }
+.client > div:last-child p:nth-child(3) { margin-top: 9px; }
+.summary { padding: 18px 32px; break-inside: avoid; }
+.proposal h2 { font-weight: 600; }
+.summary h2, .conditions h2, .notes h2 { margin: 0; font-size: 16px; }
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 24px; margin-top: 12px; }
+.facts > div { padding: 0 0 9px; background: none; border-radius: 0; border-bottom: 1px solid #edf1f4; }
+.facts dt { font-size: 11px; color: #607080; }
+.facts dd { margin-top: 2px; font-size: 14px; }
+.content { padding: 0 32px 24px; }
+.package { border-top: 2px solid #c09a60; padding: 14px 0; margin-bottom: 8px; }
+.package h3 { margin-top: 3px; font-size: 20px; }
+.package > div:first-child { break-inside: avoid; }
+.package > div:first-child p { font-size: 12px; line-height: 1.5; }
+.twoColumns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 20px; margin-top: 12px; }
+.twoColumns > * { min-width: 0; overflow-wrap: anywhere; break-inside: avoid; }
+.pricing { border: 1px solid #dce5ec; border-radius: 5px; overflow-x: auto; }
+.pricing > div > div { grid-template-columns: minmax(0, 1fr) 42px 90px 96px; padding: 9px 12px; gap: 10px; font-size: 12px; }
+.pricing p { overflow-wrap: anywhere; }
+.total { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 18px; margin-top: 14px; color: white; background: #0b2742; border-radius: 5px; break-inside: avoid; }
+.total p:first-child { font-size: 11px; }
+.total p:last-child { margin: 0; font-size: 28px; white-space: nowrap; }
+.notes { margin-top: 20px; }
+.notes p { margin-top: 6px; white-space: pre-wrap; font-size: 12px; }
+.conditions { margin-top: 22px; padding-top: 15px; border-top: 1px solid #e6dccb; }
+.conditions h2, .notes h2 { break-after: avoid; }
+.conditions .twoColumns > div { padding: 0; border-radius: 0; background: none; }
+.conditions h3 { font-size: 12px; }
+.conditions p { margin-top: 4px; font-size: 11px; line-height: 1.5; color: #536373; }
+.footer { margin-top: 18px; padding-top: 10px; border-top: 1px solid #e6dccb; font-size: 10px; line-height: 1.5; color: #607080; break-inside: avoid; }
+@media screen and (max-width: 600px) {
+  .header, .client, .summary { padding: 18px; }
+  .content { padding: 0 18px 20px; }
+  .header > div:last-child { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .header h1 { font-size: 24px; }
+  .client { gap: 14px; }
+  .twoColumns { grid-template-columns: 1fr; }
+  .total { flex-wrap: wrap; }
+}
+@media print {
+  .proposal { font-size: 10pt; padding: 0; background: white; }
+  .document { max-width: none; border: 0; border-radius: 0; overflow: visible; }
+  .header { padding: 5mm 7mm; break-inside: avoid; }
+  .header img { max-height: 15mm; max-width: 42mm; }
+  .header h1 { font-size: 21pt; }
+  .client { padding: 5mm 7mm 4mm; break-inside: avoid; }
+  .summary { padding: 4mm 7mm; }
+  .content { padding: 0 7mm 4mm; }
+  .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .twoColumns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .package { break-inside: auto; }
+  .pricing { overflow: visible; }
+  .pricing > div { min-width: 0; }
+  .pricing > div > div { break-inside: avoid; }
+  .pricing > div > div:first-child { break-after: avoid; }
+  .conditions { break-inside: auto; }
+  .conditions p { font-size: 9pt; }
+  .footer { font-size: 8.5pt; }
+}

@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SetupNotice } from "@/components/setup-notice";
-import { formatCurrencyFromCents, quoteEventAreaLabel, quoteStatusLabel } from "@/lib/domain/quote";
+import { formatCurrencyFromCents, quoteEventAreaLabel } from "@/lib/domain/quote";
 import { requireUser } from "@/lib/auth";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { PrintButton } from "./print-button";
+import styles from "./proposal.module.css";
 
 type QuoteProposal = {
   id: string;
@@ -134,7 +135,7 @@ export default async function QuoteProposalPage({ params }: { params: Promise<{ 
   const issueDate = new Intl.DateTimeFormat("pt-BR", { dateStyle: "long" }).format(new Date(detail.created_at));
 
   return (
-    <main className="bg-[#eef5fb] px-4 py-6 text-[#0b2742] print:bg-white print:p-0">
+    <main className={`${styles.proposal} bg-[#eef5fb] px-4 py-6 text-[#0b2742] print:bg-white print:p-0`}>
       <div className="mx-auto mb-4 flex max-w-4xl items-center justify-between gap-3 print:hidden">
         <Link href={`/orcamentos/${detail.id}`} className="text-sm font-semibold text-[#1f5f8b] underline">
           ← Voltar ao orçamento
@@ -142,9 +143,9 @@ export default async function QuoteProposalPage({ params }: { params: Promise<{ 
         <PrintButton />
       </div>
 
-      <article className="mx-auto max-w-4xl overflow-hidden rounded-[2rem] bg-white shadow-sm ring-1 ring-[#e6dccb] print:max-w-none print:overflow-visible print:rounded-none print:shadow-none print:ring-0">
+      <article className={styles.document}>
         <section>
-          <header className="relative overflow-hidden bg-[#0b2742] px-8 py-10 text-white md:px-12 print:min-h-[64mm] print:rounded-none print:py-8">
+          <header className={styles.header}>
             <div className="absolute right-[-4rem] top-[-5rem] h-56 w-56 rounded-full bg-[#77a8d8]/30" />
             <div className="absolute bottom-[-6rem] left-[-5rem] h-60 w-60 rounded-full bg-[#1f5f8b]/35" />
             <div className="relative">
@@ -155,17 +156,14 @@ export default async function QuoteProposalPage({ params }: { params: Promise<{ 
                 <p className="text-sm font-semibold tracking-[0.32em] text-[#b8d8f2]">SUNRISE CELEBRATIONS</p>
               )}
               <h1 className="mt-5 max-w-2xl text-4xl font-semibold leading-tight md:text-5xl">Proposta de evento</h1>
-              <p className="mt-4 max-w-2xl text-lg text-white/80">
-                Uma celebração pensada com cuidado, clareza e atenção aos detalhes.
-              </p>
             </div>
           </header>
 
-          <div className="grid gap-5 border-b border-[#eadfce] px-8 py-8 md:grid-cols-[1.4fr_0.8fr] md:px-12 print:break-inside-avoid print:py-7">
+          <div className={styles.client}>
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#1f5f8b]">Cliente</p>
               <h2 className="mt-2 text-2xl font-semibold">{detail.leads?.name ?? "Cliente"}</h2>
-              {detail.leads?.company && <p className="mt-1 text-slate-600">{detail.leads.company}</p>}
+              {detail.leads?.company && detail.leads.company.trim().toLocaleLowerCase() !== detail.leads.name.trim().toLocaleLowerCase() && <p className="mt-1 text-slate-600">{detail.leads.company}</p>}
               <p className="mt-1 text-slate-600">{detail.leads?.phone ?? "Lead não informado"}</p>
             </div>
             <div className="rounded-2xl bg-[#f3f8fc] p-5">
@@ -173,33 +171,15 @@ export default async function QuoteProposalPage({ params }: { params: Promise<{ 
               <p className="mt-1 font-semibold">{detail.title}</p>
               <p className="mt-3 text-sm text-slate-500">Emitido em</p>
               <p className="mt-1 font-semibold">{issueDate}</p>
-              <p className="mt-3 inline-flex rounded-full bg-[#e3f0fa] px-3 py-1 text-sm font-semibold text-[#1f5f8b]">{quoteStatusLabel(detail.status)}</p>
             </div>
           </div>
 
-          <section className="grid gap-6 px-8 py-8 md:grid-cols-2 md:px-12 print:break-inside-avoid print:py-7">
-            <div>
-              <h2 className="text-xl font-semibold">Observações gerais</h2>
-              <p className="mt-3 whitespace-pre-wrap text-slate-700">{detail.notes?.trim() || "Condições, validade e próximos detalhes podem ser alinhados com a equipe Sunrise."}</p>
-            </div>
-            <div className="rounded-2xl bg-[#f3f8fc] p-5">
-              <h2 className="text-xl font-semibold">Próximo passo</h2>
-              <p className="mt-3 text-slate-700">
-                Após aprovação, nossa equipe confirma disponibilidade, contrato, forma de pagamento e detalhes finais do evento.
-              </p>
-            </div>
-          </section>
-
-          <footer className="border-t border-[#eadfce] px-8 py-6 text-sm text-slate-500 md:px-12 print:hidden">
-            <p>Sunrise Celebrations - proposta gerada pelo Sunrise OS.</p>
-          </footer>
         </section>
 
         <section>
-          <div className="px-8 py-8 md:px-12 print:pt-10">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#1f5f8b]">Resumo do evento</p>
-            <h2 className="mt-2 text-3xl font-semibold">Detalhes e investimento</h2>
-            <dl className="mt-6 grid gap-4 md:grid-cols-4 print:break-inside-avoid">
+          <div className={styles.summary}>
+            <h2>Seu evento</h2>
+            <dl className={styles.facts}>
               <InfoCard label="Tipo de evento" value={detail.event_type ?? "A definir"} />
               <InfoCard label="Data desejada" value={formatDate(detail.desired_date)} />
               <InfoCard label="Convidados" value={detail.guest_count ? `${detail.guest_count} pessoas` : "A definir"} />
@@ -207,9 +187,9 @@ export default async function QuoteProposalPage({ params }: { params: Promise<{ 
             </dl>
           </div>
 
-          <section className="px-8 pb-8 md:px-12 print:pb-6">
+          <section className={styles.content}>
             {selectedPackage?.event_package_catalog && (
-              <section className="mb-6 rounded-2xl border border-[#d7e5ef] bg-[#f8fbfd] p-5 print:break-inside-avoid">
+              <section className={styles.package}>
                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                   <div>
                     <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#1f5f8b]">{isFinalProposal ? "Pacote definido" : "Proposta provisória"}</p>
@@ -219,22 +199,17 @@ export default async function QuoteProposalPage({ params }: { params: Promise<{ 
                     )}
                     {!isFinalProposal && <p className="mt-3 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-[#1f5f8b] ring-1 ring-[#d7e5ef]">Alguns itens ainda serão escolhidos pelo cliente antes da proposta final.</p>}
                   </div>
-                  <div className="rounded-2xl bg-white p-4 text-sm ring-1 ring-[#d7e5ef]">
-                    <p className="text-slate-500">Convidados</p>
-                    <p className="mt-1 text-lg font-semibold">{selectedPackage.guest_count} pessoas</p>
-                    <p className="mt-2 text-slate-500">Pacote incluso no investimento total</p>
-                  </div>
                 </div>
                 {fixedPackageItems.length > 0 && (
-                  <div className="mt-5 grid gap-2 md:grid-cols-2">
-                    {fixedPackageItems.map((item) => <PackageItemCard key={item.id} item={item} />)}
+                  <div className={styles.twoColumns}>
+                    {groupPackageItems(fixedPackageItems).map((group) => <PackageItemCategory key={group.category} group={group} />)}
                   </div>
                 )}
                 {isFinalProposal && selectedPackageChoiceItems.length > 0 && (
                   <div className="mt-5">
                     <h4 className="text-sm font-semibold uppercase tracking-[0.14em] text-[#1f5f8b]">Escolhas definidas</h4>
-                    <div className="mt-3 grid gap-2 md:grid-cols-2">
-                      {selectedPackageChoiceItems.map((item) => <PackageItemCard key={item.id} item={item} />)}
+                    <div className={styles.twoColumns}>
+                      {groupPackageItems(selectedPackageChoiceItems).map((group) => <PackageItemCategory key={group.category} group={group} />)}
                     </div>
                   </div>
                 )}
@@ -243,7 +218,7 @@ export default async function QuoteProposalPage({ params }: { params: Promise<{ 
                     {pendingChoiceGroups.map((group) => (
                       <div key={group.name} className="rounded-xl bg-white p-4 ring-1 ring-[#d7e5ef] print:break-inside-avoid">
                         <h4 className="text-sm font-semibold text-[#1f5f8b]">{choiceGroupInstruction(group)}</h4>
-                        <ul className="mt-3 grid gap-2 md:grid-cols-2">
+                        <ul className={styles.twoColumns}>
                           {group.items.map((item) => (
                             <li key={item.id} className="flex gap-2 text-sm">
                               <span className="mt-1 h-3 w-3 shrink-0 rounded-sm border border-[#1f5f8b]" />
@@ -262,7 +237,7 @@ export default async function QuoteProposalPage({ params }: { params: Promise<{ 
               </section>
             )}
 
-            <div className="overflow-x-auto rounded-2xl border border-[#eadfce] print:overflow-visible print:break-inside-avoid">
+            {(items.length > 0 || selectedPackage?.event_package_catalog) && <div className={styles.pricing}>
               <div className="min-w-[680px] print:min-w-0">
                 <div className="grid grid-cols-[1fr_80px_120px_120px] gap-3 bg-[#f3f8fc] px-5 py-3 text-sm font-semibold text-[#1f5f8b]">
                   <p>Item</p>
@@ -270,6 +245,12 @@ export default async function QuoteProposalPage({ params }: { params: Promise<{ 
                   <p>Unitário</p>
                   <p className="text-right">Subtotal</p>
                 </div>
+                {selectedPackage?.event_package_catalog && <div className="grid grid-cols-[1fr_80px_120px_120px] gap-3 border-t border-[#eadfce] px-5 py-4 text-sm print:break-inside-avoid">
+                  <p className="font-medium">Pacote {selectedPackage.event_package_catalog.name}</p>
+                  <p>{selectedPackage.guest_count.toLocaleString("pt-BR")}</p>
+                  <p>{formatCurrencyFromCents(selectedPackage.unit_price_cents)}</p>
+                  <p className="text-right font-semibold">{formatCurrencyFromCents(selectedPackage.total_price_cents)}</p>
+                </div>}
                 {items.length ? (
                   items.map((item) => {
                     const quantity = Number(item.quantity);
@@ -283,19 +264,20 @@ export default async function QuoteProposalPage({ params }: { params: Promise<{ 
                     );
                   })
                 ) : (
-                  <div className="border-t border-[#eadfce] px-5 py-6 text-sm text-slate-600">Nenhum item adicionado ao orçamento.</div>
+                  null
                 )}
               </div>
-            </div>
+            </div>}
 
-            <div className="ml-auto mt-6 max-w-sm rounded-2xl bg-[#0b2742] p-6 text-white print:break-inside-avoid print:p-5">
+            <div className={styles.total}>
               <p className="text-sm uppercase tracking-[0.18em] text-[#b8d8f2]">Investimento total</p>
               <p className="mt-2 text-4xl font-semibold">{formatCurrencyFromCents(detail.total_amount_cents)}</p>
             </div>
 
-            <section className="mt-8 print:break-inside-avoid">
+            {detail.notes?.trim() && <section className={styles.notes}><h2>Observações</h2><p>{detail.notes}</p></section>}
+            <section className={styles.conditions}>
               <h2 className="text-xl font-semibold">Condições e informações adicionais</h2>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div className={styles.twoColumns}>
                 {standardProposalInfo.map((option) => (
                   <div key={option.title} className="rounded-2xl bg-[#f3f8fc] p-5 print:break-inside-avoid">
                     <h3 className="font-semibold">{option.title}</h3>
@@ -310,6 +292,7 @@ export default async function QuoteProposalPage({ params }: { params: Promise<{ 
                 ))}
               </div>
             </section>
+            <footer className={styles.footer}>Após aprovação, nossa equipe confirma disponibilidade, contrato, forma de pagamento e detalhes finais do evento.</footer>
           </section>
         </section>
       </article>
@@ -326,14 +309,30 @@ function InfoCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-function PackageItemCard({ item }: { item: EventPackageItem }) {
+type PackageItemGroup = { category: string; items: EventPackageItem[] };
+
+function groupPackageItems(items: EventPackageItem[]): PackageItemGroup[] {
+  const groups = new Map<string, EventPackageItem[]>();
+  for (const item of items) {
+    const category = categoryLabel(item.category);
+    groups.set(category, [...(groups.get(category) ?? []), item]);
+  }
+  return Array.from(groups, ([category, groupedItems]) => ({ category, items: groupedItems }))
+    .sort((left, right) => left.category.localeCompare(right.category, "pt-BR"));
+}
+
+function PackageItemCategory({ group }: { group: PackageItemGroup }) {
   return (
     <div className="rounded-lg bg-white px-3 py-2 ring-1 ring-[#d7e5ef] print:break-inside-avoid">
-      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-[#1f5f8b]">{categoryLabel(item.category)}</p>
-        <p className="text-sm font-semibold">{item.name}</p>
-      </div>
-      {item.description && <p className="mt-1 text-xs leading-5 text-slate-600">{item.description}</p>}
+      <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-[#1f5f8b]">{group.category}</p>
+      <ul className="mt-1 space-y-1 text-sm">
+        {group.items.map((item) => (
+          <li key={item.id}>
+            <p className="font-semibold">{item.name}</p>
+            {item.description && <p className="mt-0.5 text-xs leading-5 text-slate-600">{item.description}</p>}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
