@@ -92,7 +92,7 @@ export default async function OptionsAdminPage() {
     .order("name");
   const { data: packageRules } = await supabase
     .from("event_package_rules")
-    .select("id,package_id,subcategory_id,title,selection_min,selection_max,is_required,event_package_catalog(id,name,event_type,event_types),event_package_subcategories(id,category,name),event_package_rule_items(id,event_package_item_catalog(id,name))")
+    .select("id,package_id,subcategory_id,title,selection_min,selection_max,is_required,event_package_catalog(id,name,event_type,event_types),event_package_subcategories(id,category,name),event_package_rule_items(id,item_catalog_id,event_package_item_catalog(id,name))")
     .order("sort_order")
     .order("created_at");
   const { data: whatsappConnection } = await supabase

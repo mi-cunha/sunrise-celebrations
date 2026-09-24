@@ -7,9 +7,11 @@ import {
   createPackageLibraryItem,
   createPackageRule,
   createPackageSubcategory,
+  removePackageRule,
   removePackageLibraryItem,
   removePackageSubcategory,
   updatePackageLibraryItem,
+  updatePackageRule,
   updatePackageSubcategory,
   type PackageModelFormState,
 } from "./actions";
@@ -53,7 +55,7 @@ export type PackageRule = {
   is_required: boolean;
   event_package_catalog: { id: string; name: string; event_type: string; event_types: string[] | null }[] | { id: string; name: string; event_type: string; event_types: string[] | null } | null;
   event_package_subcategories: { id: string; category: string; name: string }[] | { id: string; category: string; name: string } | null;
-  event_package_rule_items: { id: string; event_package_item_catalog: { id: string; name: string }[] | { id: string; name: string } | null }[];
+  event_package_rule_items: { id: string; item_catalog_id: string; event_package_item_catalog: { id: string; name: string }[] | { id: string; name: string } | null }[];
 };
 
 export function PackageLibraryPanel({ items, subcategories }: { items: PackageLibraryItem[]; subcategories: PackageSubcategory[] }) {
@@ -187,12 +189,66 @@ export function PackageRulesEditor({ packageId, items, rules, subcategories }: {
     <summary className="cursor-pointer p-4 font-semibold text-[#18352d]">Itens reutilizáveis e escolhas ({packageRules.length})</summary>
     <div className="space-y-4 border-t border-[#edf1ee] p-4">
       <p className="text-sm text-slate-600">Escolha uma subcategoria, marque os itens e defina quantos o cliente poderá escolher. Mínimo e máximo iguais a zero incluem todos os itens.</p>
-      {packageRules.length > 0 && <ul className="grid gap-2 sm:grid-cols-2">{packageRules.map((rule) => <li key={rule.id} className="rounded-lg border border-[#edf1ee] bg-[#fbf8f1] p-3 text-sm"><strong>{rule.title || packageRuleSubcategoryLabel(rule)}</strong><span className="block text-slate-600">{ruleInstruction(rule)} · {rule.event_package_rule_items.length} item(ns)</span></li>)}</ul>}
+      {packageRules.length > 0 && <ul className="grid gap-2">{packageRules.map((rule) => <PackageRuleAccordion key={rule.id} rule={rule} packageId={packageId} items={items} />)}</ul>}
       {subcategories.length === 0 && <p className="rounded-lg bg-[#fff5e6] p-3 text-sm">Crie uma subcategoria na biblioteca abaixo para começar.</p>}
       <PackageRuleForm items={items} packageId={packageId} subcategories={subcategories} />
       {packageRules.length > 0 && <details className="rounded-lg border border-[#edf1ee] p-3"><summary className="cursor-pointer text-sm font-semibold">Acrescentar item a uma escolha existente</summary><div className="mt-3"><PackageRuleItemForm items={items} rules={packageRules} /></div></details>}
     </div>
   </details>;
+}
+
+function PackageRuleAccordion({ items, packageId, rule }: { items: PackageLibraryItem[]; packageId: string; rule: PackageRule }) {
+  const [updateState, updateAction, updatePending] = useActionState(updatePackageRule, initialState);
+  const [removeState, removeAction, removePending] = useActionState(removePackageRule, initialState);
+  const updateMessage = updateState.ruleId === rule.id ? updateState.error ?? updateState.success : undefined;
+  const removeMessage = removeState.ruleId === rule.id ? removeState.error ?? removeState.success : undefined;
+  const values = updateState.ruleId === rule.id ? updateState : undefined;
+  const selectedIds = new Set(rule.event_package_rule_items.map((item) => item.item_catalog_id));
+  const availableItems = items.filter((item) => firstRecord(item.event_package_subcategories)?.id === rule.subcategory_id);
+
+  return (
+    <li>
+      <details className="rounded-lg border border-[#edf1ee] bg-[#fbf8f1]">
+        <summary className="cursor-pointer list-none p-3 text-sm transition hover:bg-[#f6f0e5]">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div><strong>{rule.title || packageRuleSubcategoryLabel(rule)}</strong><span className="block text-slate-600">{ruleInstruction(rule)} · {rule.event_package_rule_items.length} item(ns)</span></div>
+            <span className="rounded-full border border-[#d9ded8] bg-white px-2 py-1 text-xs font-semibold text-[#083653]">Editar ou retirar</span>
+          </div>
+        </summary>
+        <div className="border-t border-[#edf1ee] bg-white p-3">
+          <p className="text-sm text-[#5f7180]">Altere o título, a quantidade de escolhas e os itens disponíveis neste pacote.</p>
+          <form action={updateAction}>
+            <input type="hidden" name="ruleId" value={rule.id} />
+            <input type="hidden" name="packageId" value={packageId} />
+            <input type="hidden" name="subcategoryId" value={rule.subcategory_id} />
+            <div className="mt-3">
+              <label htmlFor={`rule-title-${rule.id}`}>Título na proposta</label>
+              <input id={`rule-title-${rule.id}`} name="title" defaultValue={values?.title ?? rule.title ?? ""} placeholder={packageRuleSubcategoryLabel(rule)} />
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <div><label htmlFor={`rule-min-${rule.id}`}>Mín.</label><input id={`rule-min-${rule.id}`} name="selectionMin" type="number" min="0" defaultValue={values?.selectionMin ?? rule.selection_min} /></div>
+              <div><label htmlFor={`rule-max-${rule.id}`}>Máx.</label><input id={`rule-max-${rule.id}`} name="selectionMax" type="number" min="0" defaultValue={values?.selectionMax ?? rule.selection_max} /></div>
+            </div>
+            <label className="mt-3 !mb-0 !flex items-center gap-2 text-sm"><input type="checkbox" name="isRequired" defaultChecked={rule.is_required} className="!h-4 !w-4" />Obrigatório</label>
+            <div className="mt-3 rounded-lg border border-[#edf1ee] bg-[#fbf8f1] p-3">
+              <p className="text-sm font-semibold text-[#083653]">Itens deste grupo</p>
+              <div className="mt-2 grid gap-2">
+                {availableItems.map((item) => <label key={item.id} className="!mb-0 !flex items-center gap-2 text-sm"><input type="checkbox" name="itemIds" value={item.id} defaultChecked={selectedIds.has(item.id)} className="!h-4 !w-4" />{item.name}</label>)}
+              </div>
+            </div>
+            {updateMessage && <p role="status" className={`mt-3 rounded-lg p-3 text-sm ${updateState.error ? "bg-red-50 text-red-800" : "bg-[#edf5ee] text-[#356451]"}`}>{updateMessage}</p>}
+            <button disabled={updatePending} className="mt-3 rounded-lg bg-[#083653] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{updatePending ? "Salvando..." : "Salvar alterações"}</button>
+          </form>
+          <form action={removeAction} onSubmit={(event) => { if (!window.confirm(`Retirar “${rule.title || packageRuleSubcategoryLabel(rule)}” deste pacote?`)) event.preventDefault(); }} className="mt-3 border-t border-[#edf1ee] pt-3">
+            <input type="hidden" name="ruleId" value={rule.id} />
+            <input type="hidden" name="packageId" value={packageId} />
+            {removeMessage && <p role="status" className={`mb-3 rounded-lg p-3 text-sm ${removeState.error ? "bg-red-50 text-red-800" : "bg-[#edf5ee] text-[#356451]"}`}>{removeMessage}</p>}
+            <button disabled={removePending} className="rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60">{removePending ? "Retirando..." : "Retirar grupo do pacote"}</button>
+          </form>
+        </div>
+      </details>
+    </li>
+  );
 }
 
 function PackageSubcategoryForm() {

@@ -159,6 +159,15 @@ const packageRuleSchema = z
     }
   });
 
+const packageRuleUpdateSchema = packageRuleSchema.extend({
+  ruleId: z.string().uuid(),
+});
+
+const packageRuleDeleteSchema = z.object({
+  ruleId: z.string().uuid(),
+  packageId: z.string().uuid(),
+});
+
 const packageRuleItemSchema = z.object({
   ruleId: z.string().uuid(),
   itemId: z.string().uuid(),
@@ -674,6 +683,59 @@ export async function createPackageRule(_: PackageModelFormState, formData: Form
 
   revalidatePath("/admin/opcoes");
   return { success: "Regra criada no pacote." };
+}
+
+export async function updatePackageRule(_: PackageModelFormState, formData: FormData): Promise<PackageModelFormState> {
+  const raw = {
+    ruleId: String(formData.get("ruleId") ?? ""),
+    packageId: String(formData.get("packageId") ?? ""),
+    subcategoryId: String(formData.get("subcategoryId") ?? ""),
+    itemIds: formData.getAll("itemIds").map(String),
+    title: String(formData.get("title") ?? ""),
+    selectionMin: String(formData.get("selectionMin") ?? ""),
+    selectionMax: String(formData.get("selectionMax") ?? ""),
+    isRequired: formData.get("isRequired") === "on",
+  };
+  const parsed = packageRuleUpdateSchema.safeParse(raw);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revise o grupo de itens.", packageId: raw.packageId, ruleId: raw.ruleId, subcategoryId: raw.subcategoryId, title: raw.title, selectionMin: raw.selectionMin, selectionMax: raw.selectionMax };
+
+  const { supabase, permissions } = await requireUser();
+  if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
+
+  const { error } = await supabase.rpc("update_event_package_rule", {
+    p_rule_id: parsed.data.ruleId,
+    p_title: parsed.data.title || null,
+    p_selection_min: parsed.data.selectionMin,
+    p_selection_max: parsed.data.selectionMax,
+    p_is_required: parsed.data.isRequired,
+    p_item_ids: parsed.data.itemIds,
+  });
+  if (error) return { error: error.message || "Não foi possível atualizar o grupo de itens.", packageId: parsed.data.packageId, ruleId: parsed.data.ruleId, subcategoryId: parsed.data.subcategoryId, title: raw.title, selectionMin: raw.selectionMin, selectionMax: raw.selectionMax };
+
+  revalidatePath("/admin/opcoes");
+  revalidatePath("/orcamentos/[id]", "page");
+  revalidatePath("/orcamentos/[id]/proposta", "page");
+  return { success: "Grupo de itens atualizado.", packageId: parsed.data.packageId, ruleId: parsed.data.ruleId };
+}
+
+export async function removePackageRule(_: PackageModelFormState, formData: FormData): Promise<PackageModelFormState> {
+  const raw = {
+    ruleId: String(formData.get("ruleId") ?? ""),
+    packageId: String(formData.get("packageId") ?? ""),
+  };
+  const parsed = packageRuleDeleteSchema.safeParse(raw);
+  if (!parsed.success) return { error: "Não foi possível identificar o grupo de itens.", packageId: raw.packageId, ruleId: raw.ruleId };
+
+  const { supabase, permissions } = await requireUser();
+  if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
+
+  const { error } = await supabase.rpc("remove_event_package_rule", { p_rule_id: parsed.data.ruleId });
+  if (error) return { error: error.message || "Não foi possível retirar o grupo deste pacote.", packageId: parsed.data.packageId, ruleId: parsed.data.ruleId };
+
+  revalidatePath("/admin/opcoes");
+  revalidatePath("/orcamentos/[id]", "page");
+  revalidatePath("/orcamentos/[id]/proposta", "page");
+  return { success: "Grupo de itens retirado do pacote.", packageId: parsed.data.packageId, ruleId: parsed.data.ruleId };
 }
 
 export async function attachPackageRuleItem(_: PackageModelFormState, formData: FormData): Promise<PackageModelFormState> {
