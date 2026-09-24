@@ -133,7 +133,7 @@ export default async function ConversationDetailPage({ params, searchParams }: {
   const { data: options } = await supabase.from("option_catalog").select("kind,name").eq("is_active", true).order("sort_order").order("name");
   const eventTypes = options?.filter((option) => option.kind === "event_type") ?? defaultEventTypes.map((name) => ({ name }));
   const leadSources = options?.filter((option) => option.kind === "lead_source") ?? defaultLeadSources.map((name) => ({ name }));
-  const { data: responseTemplates } = await supabase.from("response_templates").select("title,body").eq("is_active", true).order("sort_order").order("title");
+  const { data: responseTemplates } = await supabase.from("response_templates").select("title,body,category").eq("is_active", true).order("sort_order").order("title");
   const { data: staffRows } = canManage
     ? await supabase.from("profiles").select("id,display_name,is_active,user_permissions(permission)").eq("is_active", true).order("display_name")
     : { data: [] };

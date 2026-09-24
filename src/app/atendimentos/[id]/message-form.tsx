@@ -23,7 +23,21 @@ export function CustomerMessageForm({ conversationId, disabled = false }: { conv
   );
 }
 
-export function HumanReplyForm({ conversationId, disabled = false, templates = [] }: { conversationId: string; disabled?: boolean; templates?: { title: string; body: string }[] }) {
+type ResponseTemplate = { title: string; body: string; category?: string | null };
+
+const categoryOrder = [
+  "Primeiro contato",
+  "Perfil do evento",
+  "Proposta",
+  "Visita",
+  "Pós-visita e reserva",
+  "Acompanhamento",
+  "Dúvidas e objeções",
+  "Encerramento",
+  "Outras respostas",
+];
+
+export function HumanReplyForm({ conversationId, disabled = false, templates = [] }: { conversationId: string; disabled?: boolean; templates?: ResponseTemplate[] }) {
   const [state, action, pending] = useActionState(addHumanMessage, initialState);
   return (
     <ConversationMessageForm
@@ -60,7 +74,7 @@ function ConversationMessageForm({
   helperText: string;
   state: ConversationFormState;
   variant: "customer" | "human";
-  templates?: { title: string; body: string }[];
+  templates?: ResponseTemplate[];
 }) {
   const [body, setBody] = useState(state.values?.body ?? "");
   const requestId = useRef(state.values?.requestId ?? "");
@@ -81,21 +95,7 @@ function ConversationMessageForm({
           {fieldLabel}
         </label>
         <p className="mt-1 text-xs text-slate-500">{helperText}</p>
-        {variant === "human" && templates.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {templates.map((template) => (
-              <button
-                key={template.title}
-                type="button"
-                disabled={disabled}
-                onClick={() => setBody(template.body)}
-                className="rounded-full border border-[#dbe3dc] px-3 py-1 text-xs font-semibold text-[#18352d] transition hover:border-[#b7c8bb] hover:bg-[#f6fbf7] active:scale-[0.98]"
-              >
-                {template.title}
-              </button>
-            ))}
-          </div>
-        )}
+        {variant === "human" && templates.length > 0 && <ResponseTemplatePicker disabled={disabled} onSelect={setBody} templates={templates} />}
         <textarea
           id={`${variant}-body`}
           name="body"
@@ -114,5 +114,49 @@ function ConversationMessageForm({
         {buttonLabel}
       </button>
     </form>
+  );
+}
+
+function ResponseTemplatePicker({ disabled, onSelect, templates }: { disabled: boolean; onSelect: (body: string) => void; templates: ResponseTemplate[] }) {
+  const groups = new Map<string, ResponseTemplate[]>();
+
+  for (const template of templates) {
+    const category = template.category?.trim() || "Outras respostas";
+    const group = groups.get(category) ?? [];
+    group.push(template);
+    groups.set(category, group);
+  }
+
+  const orderedGroups = [...groups.entries()].sort(([left], [right]) => {
+    const leftIndex = categoryOrder.indexOf(left);
+    const rightIndex = categoryOrder.indexOf(right);
+    return (leftIndex === -1 ? categoryOrder.length : leftIndex) - (rightIndex === -1 ? categoryOrder.length : rightIndex) || left.localeCompare(right, "pt-BR");
+  });
+
+  return (
+    <div className="mt-3 space-y-2" aria-label="Respostas prontas">
+      <p className="text-xs font-semibold text-[#356451]">Respostas prontas</p>
+      {orderedGroups.map(([category, group], index) => (
+        <details key={category} open={index === 0} className="overflow-hidden rounded-lg border border-[#dbe3dc] bg-[#fbfdfd]">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-xs font-semibold text-[#18352d] hover:bg-[#edf5ee]">
+            <span>{category}</span>
+            <span className="rounded-full bg-[#e6f1f6] px-2 py-0.5 text-[10px] text-[#0f5f8f]">{group.length}</span>
+          </summary>
+          <div className="grid gap-2 border-t border-[#e4ece7] p-2 sm:grid-cols-2">
+            {group.map((template) => (
+              <button
+                key={template.title}
+                type="button"
+                disabled={disabled}
+                onClick={() => onSelect(template.body)}
+                className="min-h-0 rounded-md border border-[#dbe3dc] bg-white px-3 py-2 text-left text-xs font-semibold text-[#18352d] transition hover:border-[#8bb3ca] hover:bg-[#f2f9fc] active:scale-[0.99] disabled:opacity-60"
+              >
+                {template.title}
+              </button>
+            ))}
+          </div>
+        </details>
+      ))}
+    </div>
   );
 }
