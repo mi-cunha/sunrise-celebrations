@@ -119,7 +119,7 @@ export default async function QuoteProposalPage({ params }: { params: Promise<{ 
 
   const { data: quote, error } = await supabase
     .from("quotes")
-    .select("id,title,status,event_type,event_area,desired_date,guest_count,notes,total_amount_cents,created_at,leads(id,name,company,phone),quote_items(id,description,quantity,unit_price_cents),quote_packages(id,package_id,unit_price_cents,guest_count,total_price_cents,notes,event_package_catalog(id,event_type,name,description,base_price_cents,event_package_items(id,category,name,description,show_in_proposal,show_in_operational_brief,is_choice,choice_group,choice_min,choice_max,source_rule_item_id,event_package_rule_items!event_package_items_source_rule_item_id_fkey(event_package_rules(event_package_subcategories(category,name)))),quote_package_item_choices(package_item_id)),quote_proposal_options(id,title,content)")
+    .select("id,title,status,event_type,event_area,desired_date,guest_count,notes,total_amount_cents,created_at,leads(id,name,company,phone),quote_items(id,description,quantity,unit_price_cents),quote_packages(id,package_id,unit_price_cents,guest_count,total_price_cents,notes,event_package_catalog(id,event_type,name,description,base_price_cents,event_package_items(id,category,name,description,show_in_proposal,show_in_operational_brief,is_choice,choice_group,choice_min,choice_max,source_rule_item_id,event_package_rule_items!event_package_items_source_rule_item_id_fkey(event_package_rules(event_package_subcategories(category,name))))),quote_package_item_choices(package_item_id)),quote_proposal_options(id,title,content)")
     .eq("id", id)
     .maybeSingle();
   const { data: settings } = await supabase.from("company_settings").select("logo_url").eq("id", true).maybeSingle();
