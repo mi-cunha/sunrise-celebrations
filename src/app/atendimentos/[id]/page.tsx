@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { SetupNotice } from "@/components/setup-notice";
@@ -206,10 +206,18 @@ export default async function ConversationDetailPage({ params, searchParams }: {
             <span className="rounded-full bg-[#dcecf6] px-3 py-1 text-sm text-[#083653]">{detail.channel === "whatsapp_cloud" ? "WhatsApp oficial" : "Simulação"}</span>
           </div>
 
-          <ol className="mt-6 max-h-[620px] space-y-4 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50/40 p-3 pr-2">
-            {messageRows.map((message) => (
-              <MessageBubble key={message.id} message={message} />
-            ))}
+          <ol className="conversation-thread mt-6 max-h-[620px] overflow-y-auto rounded-xl border border-slate-200 p-3 pr-2">
+            {messageRows.map((message, index) => {
+              const previousMessage = messageRows[index - 1];
+              const startsNewDay = !previousMessage || conversationDayKey(previousMessage.created_at) !== conversationDayKey(message.created_at);
+
+              return (
+                <Fragment key={message.id}>
+                  {startsNewDay && <li className="conversation-day-divider"><span>{formatConversationDay(message.created_at)}</span></li>}
+                  <MessageBubble message={message} />
+                </Fragment>
+              );
+            })}
           </ol>
 
           {canManage && (
@@ -384,19 +392,18 @@ export default async function ConversationDetailPage({ params, searchParams }: {
 function MessageBubble({ message }: { message: Message }) {
   const config = messageStyle(message.author);
   return (
-    <li className={`flex ${config.align}`}>
-      <article className={`max-w-[92%] rounded-lg border p-3 lg:max-w-[78%] ${config.className}`}>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${config.badgeClassName}`}>{config.label}</span>
-          {message.profiles?.display_name && <span className="text-xs text-slate-500">{message.profiles.display_name}</span>}
-          {message.isHistory && <span className="text-xs text-slate-500">Histórico importado</span>}
-          {message.message_origin === "whatsapp_business_app" && <span className="text-xs text-slate-500">WhatsApp Business · celular</span>}
-          {message.delivery_status && <span className="text-xs text-slate-500">{({ pending: "Envio em andamento", unknown: "Envio sem confirmação — não reenviar", sent: "Enviada", delivered: "Entregue", read: "Lida", failed: "Falha no envio", received: "Recebida" } as Record<string, string>)[message.delivery_status] ?? message.delivery_status}</span>}
+    <li className={`conversation-message ${config.direction}`}>
+      <article className={`conversation-bubble ${config.bubbleClassName}`}>
+        <div className="conversation-message-meta">
+          <span>{message.profiles?.display_name ?? config.label}</span>
+          {message.isHistory && <span>Histórico importado</span>}
+          {message.message_origin === "whatsapp_business_app" && <span>WhatsApp Business</span>}
         </div>
-        <p className="mt-3 whitespace-pre-wrap text-slate-800">{message.body}</p>
-        <p className="mt-3 text-xs text-slate-500">
-          {formatDateTime(message.created_at)}
-        </p>
+        <p className="conversation-message-body">{message.body}</p>
+        <div className="conversation-message-footer">
+          {message.delivery_status && <span>{({ pending: "Enviando", unknown: "Sem confirmação", sent: "Enviada", delivered: "Entregue", read: "Lida", failed: "Falha no envio", received: "Recebida" } as Record<string, string>)[message.delivery_status] ?? message.delivery_status}</span>}
+          <time dateTime={message.created_at}>{formatConversationTime(message.created_at)}</time>
+        </div>
       </article>
     </li>
   );
@@ -405,34 +412,51 @@ function MessageBubble({ message }: { message: Message }) {
 function messageStyle(author: string) {
   if (author === "cliente") {
     return {
-      align: "justify-start",
+      direction: "conversation-message--incoming",
       label: "Contato",
-      className: "border-[#dbe3dc] bg-white",
-      badgeClassName: "bg-slate-100 text-slate-700",
+      bubbleClassName: "conversation-bubble--incoming",
     };
   }
   if (author === "ia") {
     return {
-      align: "justify-start",
-      label: "IA",
-      className: "border-[#d8eadc] bg-[#f6fbf7]",
-      badgeClassName: "bg-[#edf5ee] text-[#356451]",
+      direction: "conversation-message--outgoing",
+      label: "IA Sunrise",
+      bubbleClassName: "conversation-bubble--assistant",
     };
   }
   if (author === "humano") {
     return {
-      align: "justify-end",
+      direction: "conversation-message--outgoing",
       label: "Atendente",
-      className: "border-[#c7d8ce] bg-[#edf5ee]",
-      badgeClassName: "bg-[#18352d] text-white",
+      bubbleClassName: "conversation-bubble--outgoing",
     };
   }
   return {
-    align: "justify-center",
+    direction: "conversation-message--system",
     label: "Sistema",
-    className: "border-[#f0dfbd] bg-[#fffaf0]",
-    badgeClassName: "bg-[#fff1d2] text-[#744c15]",
+    bubbleClassName: "conversation-bubble--system",
   };
+}
+
+function conversationDayKey(value: string) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date(value));
+}
+
+function formatConversationDay(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "America/Sao_Paulo",
+  }).format(new Date(value));
+}
+
+function formatConversationTime(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Sao_Paulo",
+  }).format(new Date(value));
 }
 
 function historyText(entry: LeadHistoryEntry) {

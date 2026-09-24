@@ -66,7 +66,7 @@ function ConversationMessageForm({
   const requestId = useRef(state.values?.requestId ?? "");
   const buttonClass =
     variant === "human"
-      ? "bg-[#18352d] text-white shadow-sm hover:bg-[#23483d] hover:shadow active:bg-[#102820]"
+      ? "bg-[#0f5f8f] text-white shadow-sm hover:bg-[#083653] hover:shadow active:bg-[#06283d]"
       : "border border-[#dbe3dc] bg-white text-[#18352d] hover:border-[#b7c8bb] hover:bg-[#f6fbf7] active:bg-[#edf5ee]";
 
   return (

@@ -104,8 +104,9 @@ summary::-webkit-details-marker {
 /* Shared workspace: quiet surfaces, navy navigation and warm Sunrise accents. */
 .workspace { min-height: 100dvh; background: #f6f7f9; font-size: 14px; line-height: 1.5; }
 .workspace-sidebar { position: fixed; inset: 0 auto 0 0; width: 238px; display: flex; flex-direction: column; background: #fff; border-right: 1px solid #e3e7ec; z-index: 50; }
-.sunrise-brand { display: flex; gap: 10px; align-items: center; min-height: 100px; padding: 22px 26px; color: #083653; font-size: 29px; font-weight: 600; letter-spacing: -.8px; }
-.brand-sun { font-size: 38px; color: #c08d43; }
+.sunrise-brand { display: flex; gap: 10px; align-items: center; min-height: 116px; padding: 22px 26px; color: #fff; background: #083653; font-size: 29px; font-weight: 600; letter-spacing: -.8px; }
+.sunrise-brand img { max-height: 68px; }
+.brand-sun { font-size: 38px; color: #e7bf83; }
 .brand-caption { display: block; margin-top: -3px; font-size: 9px; letter-spacing: 3px; font-weight: 600; }
 .workspace-label { margin: 0 24px 8px; color: #748190; font-size: 9px; letter-spacing: 1.6px; }
 .workspace-navigation { overflow-y: auto; flex: 1; padding: 0 14px 20px; }
@@ -174,6 +175,25 @@ summary::-webkit-details-marker {
 .crm-card dl dd { white-space: normal; overflow-wrap: anywhere; max-width: 65%; }
 .crm-board-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin: 24px 0 14px; color: #65768a; font-size: 12px; }
 .crm-board-heading h2 { font-size: 15px; font-weight: 600; color: #193d58; }
+.conversation-thread { display: flex; flex-direction: column; gap: 12px; background-color: #eef5f8; background-image: radial-gradient(#0f5f8f10 1px, transparent 1px); background-size: 15px 15px; }
+.conversation-day-divider { display: flex; align-items: center; justify-content: center; margin: 4px 0 2px; }
+.conversation-day-divider span { border-radius: 999px; background: #ffffffd9; box-shadow: 0 1px 2px #08365312; padding: 4px 10px; color: #597080; font-size: 11px; font-weight: 600; text-transform: capitalize; }
+.conversation-message { display: flex; }
+.conversation-message--incoming { justify-content: flex-start; }
+.conversation-message--outgoing { justify-content: flex-end; }
+.conversation-message--system { justify-content: center; }
+.conversation-bubble { width: fit-content; max-width: min(78%, 680px); border: 1px solid; border-radius: 12px; padding: 10px 12px 8px; box-shadow: 0 1px 2px #0836530d; }
+.conversation-bubble--incoming { border-color: #dbe4eb; border-top-left-radius: 4px; background: #fff; color: #15344b; }
+.conversation-bubble--assistant { border-color: #c4e0ef; border-top-right-radius: 4px; background: #e2f1f8; color: #083653; }
+.conversation-bubble--outgoing { border-color: #0a517a; border-top-right-radius: 4px; background: #0f5f8f; color: #fff; }
+.conversation-bubble--system { max-width: min(82%, 620px); border-color: #dae5eb; background: #f9fcfd; color: #526a79; text-align: center; }
+.conversation-message-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; color: #537080; font-size: 10px; font-weight: 700; letter-spacing: .02em; }
+.conversation-message-meta span + span { border-left: 1px solid currentColor; padding-left: 7px; font-weight: 500; }
+.conversation-bubble--outgoing .conversation-message-meta { color: #d9edf8; }
+.conversation-message-body { margin-top: 5px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.45; }
+.conversation-message-footer { display: flex; align-items: center; justify-content: flex-end; gap: 7px; margin-top: 6px; color: #6d8290; font-size: 10px; line-height: 1; }
+.conversation-bubble--outgoing .conversation-message-footer { color: #d9edf8; }
+.conversation-message-footer time { font-variant-numeric: tabular-nums; }
 @media (max-width: 1200px) {
   .crm-metrics { grid-template-columns: repeat(4,minmax(0,1fr)); }
   .crm-metric { border-bottom: 1px solid #edf0f3; }
@@ -198,6 +218,7 @@ summary::-webkit-details-marker {
   .crm-filters { grid-template-columns: 1fr; }
   .crm-column { flex-basis: min(290px,calc(100vw - 52px)); }
   .dashboard-metric { padding: 16px; min-height: 110px; }
+  .conversation-bubble { max-width: 90%; }
 }
 
 @media print {
