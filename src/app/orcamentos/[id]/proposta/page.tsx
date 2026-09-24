@@ -42,6 +42,21 @@ type EventPackageItem = {
   choice_group: string | null;
   choice_min: number | null;
   choice_max: number | null;
+  source_rule_item_id: string | null;
+  event_package_rule_items: SourceRuleItem[] | SourceRuleItem | null;
+};
+
+type SourceRuleItem = {
+  event_package_rules: PackageRuleSource[] | PackageRuleSource | null;
+};
+
+type PackageRuleSource = {
+  event_package_subcategories: PackageSubcategorySource[] | PackageSubcategorySource | null;
+};
+
+type PackageSubcategorySource = {
+  category: string;
+  name: string;
 };
 
 type EventPackageOption = {
@@ -104,7 +119,7 @@ export default async function QuoteProposalPage({ params }: { params: Promise<{ 
 
   const { data: quote, error } = await supabase
     .from("quotes")
-    .select("id,title,status,event_type,event_area,desired_date,guest_count,notes,total_amount_cents,created_at,leads(id,name,company,phone),quote_items(id,description,quantity,unit_price_cents),quote_packages(id,package_id,unit_price_cents,guest_count,total_price_cents,notes,event_package_catalog(id,event_type,name,description,base_price_cents,event_package_items(id,category,name,description,show_in_proposal,show_in_operational_brief,is_choice,choice_group,choice_min,choice_max)),quote_package_item_choices(package_item_id)),quote_proposal_options(id,title,content)")
+    .select("id,title,status,event_type,event_area,desired_date,guest_count,notes,total_amount_cents,created_at,leads(id,name,company,phone),quote_items(id,description,quantity,unit_price_cents),quote_packages(id,package_id,unit_price_cents,guest_count,total_price_cents,notes,event_package_catalog(id,event_type,name,description,base_price_cents,event_package_items(id,category,name,description,show_in_proposal,show_in_operational_brief,is_choice,choice_group,choice_min,choice_max,source_rule_item_id,event_package_rule_items!event_package_items_source_rule_item_id_fkey(event_package_rules(event_package_subcategories(category,name)))),quote_package_item_choices(package_item_id)),quote_proposal_options(id,title,content)")
     .eq("id", id)
     .maybeSingle();
   const { data: settings } = await supabase.from("company_settings").select("logo_url").eq("id", true).maybeSingle();
@@ -202,14 +217,14 @@ export default async function QuoteProposalPage({ params }: { params: Promise<{ 
                 </div>
                 {fixedPackageItems.length > 0 && (
                   <div className={styles.twoColumns}>
-                    {groupPackageItems(fixedPackageItems).map((group) => <PackageItemCategory key={group.category} group={group} />)}
+                    {groupPackageItems(fixedPackageItems).map((group) => <PackageItemCategory key={group.label} group={group} />)}
                   </div>
                 )}
                 {isFinalProposal && selectedPackageChoiceItems.length > 0 && (
                   <div className="mt-5">
                     <h4 className="text-sm font-semibold uppercase tracking-[0.14em] text-[#1f5f8b]">Escolhas definidas</h4>
                     <div className={styles.twoColumns}>
-                      {groupPackageItems(selectedPackageChoiceItems).map((group) => <PackageItemCategory key={group.category} group={group} />)}
+                      {groupPackageItems(selectedPackageChoiceItems).map((group) => <PackageItemCategory key={group.label} group={group} />)}
                     </div>
                   </div>
                 )}
@@ -309,22 +324,22 @@ function InfoCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-type PackageItemGroup = { category: string; items: EventPackageItem[] };
+type PackageItemGroup = { label: string; order: string; items: EventPackageItem[] };
 
 function groupPackageItems(items: EventPackageItem[]): PackageItemGroup[] {
   const groups = new Map<string, EventPackageItem[]>();
   for (const item of items) {
-    const category = categoryLabel(item.category);
-    groups.set(category, [...(groups.get(category) ?? []), item]);
+    const group = packageItemGroup(item);
+    groups.set(group.label, [...(groups.get(group.label) ?? []), item]);
   }
-  return Array.from(groups, ([category, groupedItems]) => ({ category, items: groupedItems }))
-    .sort((left, right) => left.category.localeCompare(right.category, "pt-BR"));
+  return Array.from(groups, ([label, groupedItems]) => ({ label, order: packageItemGroup(groupedItems[0]).order, items: groupedItems }))
+    .sort((left, right) => left.order.localeCompare(right.order, "pt-BR"));
 }
 
 function PackageItemCategory({ group }: { group: PackageItemGroup }) {
   return (
     <div className="rounded-lg bg-white px-3 py-2 ring-1 ring-[#d7e5ef] print:break-inside-avoid">
-      <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-[#1f5f8b]">{group.category}</p>
+      <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-[#1f5f8b]">{group.label}</p>
       <ul className="mt-1 space-y-1 text-sm">
         {group.items.map((item) => (
           <li key={item.id}>
@@ -335,6 +350,15 @@ function PackageItemCategory({ group }: { group: PackageItemGroup }) {
       </ul>
     </div>
   );
+}
+
+function packageItemGroup(item: EventPackageItem) {
+  const sourceRuleItem = firstRecord(item.event_package_rule_items);
+  const rule = firstRecord(sourceRuleItem?.event_package_rules);
+  const subcategory = firstRecord(rule?.event_package_subcategories);
+  const category = categoryLabel(subcategory?.category ?? item.category);
+  if (!subcategory) return { label: category, order: `${category}\u0000` };
+  return { label: `${category} › ${subcategory.name}`, order: `${category}\u0000${subcategory.name}` };
 }
 
 function formatDate(value: string | null) {
