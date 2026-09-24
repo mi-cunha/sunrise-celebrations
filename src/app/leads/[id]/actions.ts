@@ -1,11 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireLeadManager } from "@/lib/auth";
-import { followUpSchema, leadSchema, leadStatusChangeSchema } from "@/lib/domain/lead";
+import { requireLeadManager, requireUser } from "@/lib/auth";
+import { eventScheduleSchema, followUpSchema, leadSchema, leadStatusChangeSchema } from "@/lib/domain/lead";
 
-export type LeadDetailUpdateValues = Record<"leadId" | "name" | "company" | "phone" | "source" | "eventType" | "desiredDate" | "guestCount" | "budgetRange" | "responsibleId" | "notes", string>;
+export type LeadDetailUpdateValues = Record<"leadId" | "name" | "company" | "phone" | "source" | "eventType" | "desiredDate" | "desiredDateMode" | "desiredDateNote" | "desiredStartTime" | "desiredDurationMinutes" | "guestCount" | "budgetRange" | "responsibleId" | "notes", string>;
 export type LeadDetailUpdateState = {
   error?: string;
   success?: string;
@@ -22,6 +23,36 @@ export type LeadFollowUpState = {
   version?: number;
 };
 export type LeadStatusChangeState = { error?: string; success?: string; fieldErrors?: Record<string, string[]>; version?: number };
+export type DeleteLeadQuoteState = { error?: string; version?: number };
+
+const deleteLeadQuoteSchema = z.object({ leadId: z.string().uuid(), quoteId: z.string().uuid() });
+
+export async function deleteLeadQuote(_: DeleteLeadQuoteState, formData: FormData): Promise<DeleteLeadQuoteState> {
+  const parsed = deleteLeadQuoteSchema.safeParse({ leadId: formData.get("leadId"), quoteId: formData.get("quoteId") });
+  if (!parsed.success) return { error: "Não foi possível identificar o orçamento.", version: Date.now() };
+
+  const { supabase, permissions } = await requireUser();
+  if (!permissions.some((permission) => ["atendimento", "financeiro", "admin_owner"].includes(permission))) redirect("/painel?error=forbidden");
+
+  const { error } = await supabase.rpc("delete_quote_from_lead", {
+    p_lead_id: parsed.data.leadId,
+    p_quote_id: parsed.data.quoteId,
+  });
+  if (error) {
+    const message = error.message.toLowerCase();
+    if (message.includes("approved quote") || message.includes("contracted event")) {
+      return { error: "Orçamentos aprovados ou vinculados a um evento não podem ser excluídos.", version: Date.now() };
+    }
+    return { error: "Não foi possível excluir o orçamento. Atualize a página e tente novamente.", version: Date.now() };
+  }
+
+  revalidatePath(`/leads/${parsed.data.leadId}`);
+  revalidatePath(`/orcamentos/${parsed.data.quoteId}`);
+  revalidatePath(`/orcamentos/${parsed.data.quoteId}/proposta`);
+  revalidatePath("/crm");
+  revalidatePath("/painel");
+  return {};
+}
 
 export async function updateLeadFromDetail(_: LeadDetailUpdateState, formData: FormData): Promise<LeadDetailUpdateState> {
   const raw = leadUpdateValues(formData);
@@ -37,6 +68,8 @@ export async function updateLeadFromDetail(_: LeadDetailUpdateState, formData: F
       version: Date.now(),
     };
   }
+  const schedule = eventScheduleSchema.safeParse(raw);
+  if (!schedule.success) return { error: "Revise data, horário e duração do evento.", fieldErrors: schedule.error.flatten().fieldErrors, values: raw, version: Date.now() };
 
   const { supabase } = await requireLeadManager();
   const input = parsed.data;
@@ -52,6 +85,10 @@ export async function updateLeadFromDetail(_: LeadDetailUpdateState, formData: F
     p_notes: input.notes ?? null,
     p_budget_range: input.budgetRange ?? null,
     p_responsible_id: input.responsibleId ?? null,
+    p_desired_date_mode: schedule.data.desiredDateMode,
+    p_desired_date_note: schedule.data.desiredDateNote ?? null,
+    p_desired_start_time: schedule.data.desiredStartTime || null,
+    p_desired_duration_minutes: schedule.data.desiredDurationMinutes ? schedule.data.desiredDurationMinutes * 60 : null,
   });
 
   if (error) return { error: error.message, values: raw, version: Date.now() };
@@ -126,6 +163,10 @@ function leadUpdateValues(formData: FormData): LeadDetailUpdateValues {
     source: String(formData.get("source") ?? ""),
     eventType: String(formData.get("eventType") ?? ""),
     desiredDate: String(formData.get("desiredDate") ?? ""),
+    desiredDateMode: String(formData.get("desiredDateMode") ?? "undefined"),
+    desiredDateNote: String(formData.get("desiredDateNote") ?? ""),
+    desiredStartTime: String(formData.get("desiredStartTime") ?? ""),
+    desiredDurationMinutes: String(formData.get("desiredDurationMinutes") ?? ""),
     guestCount: String(formData.get("guestCount") ?? ""),
     budgetRange: String(formData.get("budgetRange") ?? ""),
     responsibleId: String(formData.get("responsibleId") ?? ""),

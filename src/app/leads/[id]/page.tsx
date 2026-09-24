@@ -11,6 +11,7 @@ import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { LeadDetailEditForm } from "./lead-detail-edit-form";
 import { LeadFollowUpForm } from "./lead-follow-up-form";
 import { LeadStageForm } from "./lead-stage-form";
+import { DeleteQuoteButton } from "./delete-quote-button";
 
 type Option = { kind?: string; name: string };
 
@@ -39,6 +40,7 @@ export default async function LeadDetail({
   const errorCode = Array.isArray(query.error) ? query.error[0] : query.error;
   const { supabase, permissions, user } = await requireUser();
   const canManage = canManageLeads(permissions);
+  const canDeleteQuotes = permissions.some((permission) => ["atendimento", "financeiro", "admin_owner"].includes(permission));
 
   const [{ data: lead }, { data: options }, { data: people }, { data: timeline }] = await Promise.all([
     supabase
@@ -112,7 +114,8 @@ export default async function LeadDetail({
                   <Info label="Status" value={formatLeadStatus(lead.status)} />
                   <Info label="Origem" value={lead.source ?? "Não informada"} />
                   <Info label="Evento" value={lead.event_type ?? "Não informado"} />
-                  <Info label="Data desejada" value={lead.desired_date ? formatDate(lead.desired_date) : "Não informada"} />
+                  <Info label="Data desejada" value={formatDesiredDate(lead)} />
+                  <Info label="Horário" value={formatSchedule(lead.desired_start_time, lead.desired_duration_minutes)} />
                   <Info label="Convidados" value={lead.guest_count ? String(lead.guest_count) : "Não informado"} />
                   <Info label="Faixa de orçamento" value={lead.budget_range ?? "Não informada"} />
                   <Info label="Responsável" value={activePeople.find((person) => person.id === lead.responsible_id)?.display_name ?? "Não atribuído"} />
@@ -151,7 +154,14 @@ export default async function LeadDetail({
                         {quoteStatusLabel(quote.status)} · {formatDateTime(quote.created_at)}
                       </p>
                     </div>
-                    <span className="rounded-full bg-[#edf5ee] px-3 py-1 text-sm font-semibold text-[#356451]">{formatCurrencyFromCents(quote.total_amount_cents)}</span>
+                    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                      <span className="rounded-full bg-[#edf5ee] px-3 py-1 text-sm font-semibold text-[#356451]">{formatCurrencyFromCents(quote.total_amount_cents)}</span>
+                      {canDeleteQuotes && (quote.contracted_events?.length || quote.status === "aprovado") ? (
+                        <span className="text-xs text-slate-500">{quote.contracted_events?.length ? "Vinculado a evento" : "Aprovado"}</span>
+                      ) : canDeleteQuotes ? (
+                        <DeleteQuoteButton leadId={lead.id} quoteId={quote.id} quoteTitle={quote.title} />
+                      ) : null}
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -253,6 +263,18 @@ function formatLeadStatus(status: string) {
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(new Date(`${value}T00:00:00`));
+}
+
+function formatDesiredDate(lead: { desired_date: string | null; desired_date_mode?: string; desired_date_note?: string | null }) {
+  if (lead.desired_date_mode === "month_year") return lead.desired_date_note ? `Mês/ano: ${lead.desired_date_note}` : "Mês e ano a definir";
+  if (lead.desired_date_mode === "weekday") return lead.desired_date_note ? `Dia da semana: ${lead.desired_date_note}` : "Dia da semana a definir";
+  if (lead.desired_date_mode === "undefined") return "A definir";
+  return lead.desired_date ? formatDate(lead.desired_date) : "A definir";
+}
+
+function formatSchedule(startTime?: string | null, durationMinutes?: number | null) {
+  const time = startTime ? startTime.slice(0, 5) : "A definir";
+  return durationMinutes ? `${time} · ${durationMinutes / 60}h de evento` : time;
 }
 
 function formatDateTime(value: string) {

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { quoteEditLockSchema, quoteEventAreaSchema, quoteItemDeleteSchema, quoteItemSchema, quoteItemUpdateSchema, quotePackageChoicesSchema, quotePackageDeleteSchema, quotePackageSchema, quoteStatusSchema } from "@/lib/domain/quote";
 import { requireUser } from "@/lib/auth";
+import { eventScheduleSchema } from "@/lib/domain/lead";
 
 export type QuoteFormState = {
   error?: string;
@@ -14,6 +15,34 @@ export type QuoteFormState = {
   version?: number;
   requiresDateConflictConfirmation?: boolean;
 };
+
+export async function updateQuoteEventSchedule(_: QuoteFormState, formData: FormData): Promise<QuoteFormState> {
+  const raw = {
+    quoteId: String(formData.get("quoteId") ?? ""),
+    desiredDateMode: String(formData.get("desiredDateMode") ?? "undefined"),
+    desiredDate: String(formData.get("desiredDate") ?? ""),
+    desiredDateNote: String(formData.get("desiredDateNote") ?? ""),
+    desiredStartTime: String(formData.get("desiredStartTime") ?? ""),
+    desiredDurationMinutes: String(formData.get("desiredDurationMinutes") ?? ""),
+  };
+  const id = z.string().uuid().safeParse(raw.quoteId);
+  const schedule = eventScheduleSchema.safeParse(raw);
+  if (!id.success || !schedule.success) return { error: "Revise data, horário e duração do evento.", fieldErrors: schedule.success ? undefined : schedule.error.flatten().fieldErrors, values: raw, version: Date.now() };
+  const { supabase } = await requireQuoteManager();
+  const { error } = await supabase.rpc("update_quote_event_schedule", {
+    p_quote_id: id.data,
+    p_desired_date_mode: schedule.data.desiredDateMode,
+    p_desired_date: schedule.data.desiredDate ?? null,
+    p_desired_date_note: schedule.data.desiredDateNote ?? null,
+    p_desired_start_time: schedule.data.desiredStartTime || null,
+    p_desired_duration_minutes: schedule.data.desiredDurationMinutes ? schedule.data.desiredDurationMinutes * 60 : null,
+  });
+  if (error) return { error: error.message, values: raw, version: Date.now() };
+  revalidatePath(`/orcamentos/${id.data}`);
+  revalidatePath(`/orcamentos/${id.data}/proposta`);
+  revalidatePath("/painel");
+  return { success: "Data, horário e duração atualizados.", version: Date.now() };
+}
 
 const createQuoteSchema = z.object({
   leadId: z.string().uuid(),

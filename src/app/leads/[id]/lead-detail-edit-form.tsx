@@ -17,6 +17,10 @@ type LeadEditValue = {
   source: string | null;
   event_type: string | null;
   desired_date: string | null;
+  desired_date_mode?: string;
+  desired_date_note?: string | null;
+  desired_start_time?: string | null;
+  desired_duration_minutes?: number | null;
   guest_count: number | null;
   budget_range: string | null;
   responsible_id: string | null;
@@ -89,9 +93,15 @@ export function LeadDetailEditForm({
           </select>
         </Field>
 
-        <Field label="Data desejada" htmlFor="lead-edit-desired-date" error={fieldErrors.desiredDate?.[0]}>
-          <input id="lead-edit-desired-date" name="desiredDate" type="date" defaultValue={values?.desiredDate ?? lead.desired_date ?? ""} className={fieldClass(fieldErrors.desiredDate)} />
+        <Field label="Quando seria o evento?" htmlFor="lead-edit-date-mode" error={fieldErrors.desiredDateMode?.[0]}>
+          <select id="lead-edit-date-mode" name="desiredDateMode" defaultValue={values?.desiredDateMode ?? lead.desired_date_mode ?? (lead.desired_date ? "exact" : "undefined")} className={fieldClass(fieldErrors.desiredDateMode)}>
+            <option value="exact">Data exata</option><option value="month_year">Mês e ano</option><option value="weekday">Dia da semana</option><option value="undefined">Data a definir</option>
+          </select>
         </Field>
+        <Field label="Data exata" htmlFor="lead-edit-desired-date" error={fieldErrors.desiredDate?.[0]}><input id="lead-edit-desired-date" name="desiredDate" type="date" defaultValue={values?.desiredDate ?? lead.desired_date ?? ""} className={fieldClass(fieldErrors.desiredDate)} /></Field>
+        <Field label="Detalhe da data" htmlFor="lead-edit-date-note" error={fieldErrors.desiredDateNote?.[0]}><input id="lead-edit-date-note" name="desiredDateNote" maxLength={80} placeholder="Ex.: setembro de 2027 ou sábado" defaultValue={values?.desiredDateNote ?? lead.desired_date_note ?? ""} className={fieldClass(fieldErrors.desiredDateNote)} /></Field>
+        <Field label="Horário de início" htmlFor="lead-edit-start-time" error={fieldErrors.desiredStartTime?.[0]}><input id="lead-edit-start-time" name="desiredStartTime" type="time" defaultValue={values?.desiredStartTime ?? lead.desired_start_time ?? ""} className={fieldClass(fieldErrors.desiredStartTime)} /></Field>
+        <Field label="Duração do evento (horas)" htmlFor="lead-edit-duration" error={fieldErrors.desiredDurationMinutes?.[0]}><input id="lead-edit-duration" name="desiredDurationMinutes" type="number" min="0.5" max="24" step="0.5" placeholder="Ex.: 4" defaultValue={values?.desiredDurationMinutes ?? (lead.desired_duration_minutes ? String(lead.desired_duration_minutes / 60) : "")} className={fieldClass(fieldErrors.desiredDurationMinutes)} /></Field>
 
         <Field label="Convidados estimados" htmlFor="lead-edit-guest-count" error={fieldErrors.guestCount?.[0]}>
           <input id="lead-edit-guest-count" name="guestCount" type="number" min="1" defaultValue={values?.guestCount ?? lead.guest_count ?? ""} className={fieldClass(fieldErrors.guestCount)} />

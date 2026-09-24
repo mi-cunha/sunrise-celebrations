@@ -7,6 +7,7 @@ import { conversationStatusLabel } from "@/lib/domain/conversation";
 import { canManageLeads, defaultEventTypes, defaultLeadSources } from "@/lib/domain/lead";
 import { formatCurrencyFromCents, quoteStatusLabel } from "@/lib/domain/quote";
 import { requireUser } from "@/lib/auth";
+import { formatDateTime } from "@/lib/date-format";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { assumeConversation, closeConversation, requestHumanHandoff, transferConversation } from "../actions";
 import { LeadQuickEditForm, LeadStatusForm } from "./lead-quick-edit";
@@ -315,7 +316,7 @@ export default async function ConversationDetailPage({ params, searchParams }: {
                   <li key={entry.id} className="border-l-2 border-[#e8a849] pl-3">
                     <p className="text-sm font-medium">{historyText(entry)}</p>
                     <p className="mt-1 text-xs text-slate-500">
-                      {entry.profiles?.display_name ?? "Usuário"} · {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(entry.created_at))}
+                      {entry.profiles?.display_name ?? "Usuário"} · {formatDateTime(entry.created_at)}
                     </p>
                   </li>
                 ))}
@@ -394,7 +395,7 @@ function MessageBubble({ message }: { message: Message }) {
         </div>
         <p className="mt-3 whitespace-pre-wrap text-slate-800">{message.body}</p>
         <p className="mt-3 text-xs text-slate-500">
-          {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(message.created_at))}
+          {formatDateTime(message.created_at)}
         </p>
       </article>
     </li>

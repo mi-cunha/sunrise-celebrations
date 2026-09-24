@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/browser";
 export function LoginForm({ initialMessage, shouldClearSession }: { initialMessage?: string; shouldClearSession: boolean }) {
   const [message, setMessage] = useState<string | undefined>(initialMessage);
   const [loading, setLoading] = useState(false);
+  const [recovering, setRecovering] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -18,15 +19,19 @@ export function LoginForm({ initialMessage, shouldClearSession }: { initialMessa
     setLoading(true);
     setMessage(undefined);
 
-    const { error } = await createClient().auth.signInWithPassword({
-      email: String(form.get("email")).trim(),
-      password: String(form.get("password")),
-    });
+    try {
+      const { error } = await createClient().auth.signInWithPassword({
+        email: String(form.get("email")).trim(),
+        password: String(form.get("password")),
+      });
 
-    if (error) setMessage(authErrorMessage(error.message));
-    else router.push("/painel");
-
-    setLoading(false);
+      if (error) setMessage(authErrorMessage(error.message));
+      else router.push("/painel");
+    } catch {
+      setMessage(connectionErrorMessage());
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function recover() {
@@ -36,11 +41,18 @@ export function LoginForm({ initialMessage, shouldClearSession }: { initialMessa
       return;
     }
 
-    const { error } = await createClient().auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/login/redefinir-senha`,
-    });
+    setRecovering(true);
+    try {
+      const { error } = await createClient().auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/login/redefinir-senha`,
+      });
 
-    setMessage(error ? resetPasswordErrorMessage(error.message) : "Se o e-mail estiver cadastrado, você receberá as instruções para criar uma nova senha.");
+      setMessage(error ? resetPasswordErrorMessage(error.message) : "Se o e-mail estiver cadastrado, você receberá as instruções para criar uma nova senha.");
+    } catch {
+      setMessage(connectionErrorMessage());
+    } finally {
+      setRecovering(false);
+    }
   }
 
   return (
@@ -67,8 +79,8 @@ export function LoginForm({ initialMessage, shouldClearSession }: { initialMessa
             {loading ? "Entrando..." : "Entrar"}
           </button>
         </form>
-        <button onClick={recover} type="button" className="mt-5 text-sm font-semibold text-[#356451] underline underline-offset-4">
-          Esqueci minha senha
+        <button onClick={recover} type="button" disabled={recovering} className="mt-5 text-sm font-semibold text-[#356451] underline underline-offset-4 disabled:opacity-60">
+          {recovering ? "Enviando recuperação..." : "Esqueci minha senha"}
         </button>
         <p className="mt-6 text-sm text-slate-500">Precisa de acesso? Fale com a administração.</p>
         <Link className="sr-only" href="/painel">
@@ -92,4 +104,8 @@ function resetPasswordErrorMessage(error: string) {
     return "O Supabase bloqueou novos e-mails de recuperação por alguns minutos por limite de envio. Aguarde um pouco antes de tentar novamente.";
   }
   return `Não foi possível enviar a recuperação: ${error}`;
+}
+
+function connectionErrorMessage() {
+  return "Não foi possível conectar ao serviço de login. Verifique a conexão e a configuração do Supabase.";
 }

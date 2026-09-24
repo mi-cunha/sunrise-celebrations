@@ -24,6 +24,17 @@ export const leadSchema = z.object({
 });
 export type LeadInput = z.infer<typeof leadSchema>;
 
+export const eventScheduleSchema = z.object({
+  desiredDateMode: z.enum(["exact", "month_year", "weekday", "undefined"]),
+  desiredDate: z.string().optional().transform((value) => value || undefined).refine((value) => !value || !Number.isNaN(Date.parse(value)), "Informe uma data válida."),
+  desiredDateNote: optionalText(80),
+  desiredStartTime: z.string().regex(/^$|^([01]\d|2[0-3]):[0-5]\d$/, "Informe um horário válido."),
+  desiredDurationMinutes: z.preprocess((value) => value === "" || value == null ? undefined : value, z.coerce.number().min(0.5, "Informe ao menos 30 minutos.").max(24, "Informe no máximo 24 horas.").optional()),
+}).superRefine((value, context) => {
+  if (value.desiredDateMode === "exact" && !value.desiredDate) context.addIssue({ code: "custom", path: ["desiredDate"], message: "Informe a data exata ou escolha outra opção." });
+  if (["month_year", "weekday"].includes(value.desiredDateMode) && !value.desiredDateNote) context.addIssue({ code: "custom", path: ["desiredDateNote"], message: "Descreva o mês/ano ou o dia da semana." });
+});
+
 export const followUpSchema = z.object({
   leadId: z.string().uuid(),
   nextAction: z.string().trim().min(2, "Descreva a próxima ação.").max(240),

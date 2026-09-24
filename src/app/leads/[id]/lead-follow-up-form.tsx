@@ -1,9 +1,19 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { completeLeadFollowUp, saveLeadFollowUp, type LeadFollowUpState } from "./actions";
 
 const initialState: LeadFollowUpState = {};
+const actionSuggestions = [
+  "Ligar para confirmar a visita",
+  "Enviar apresentação",
+  "Enviar proposta",
+  "Fazer follow-up da proposta",
+  "Confirmar número de convidados",
+  "Confirmar data do evento",
+  "Agendar visita",
+  "Aguardar retorno do cliente",
+] as const;
 
 type Person = { id: string; display_name: string | null };
 type LeadFollowUp = {
@@ -21,6 +31,9 @@ export function LeadFollowUpForm({ lead, people, currentUserId }: { lead: LeadFo
   const fieldErrors = saveState.fieldErrors ?? {};
   const hasFollowUp = Boolean(lead.next_action);
   const defaultAssignee = values?.nextActionAssigneeId ?? lead.next_action_assignee_id ?? lead.responsible_id ?? currentUserId;
+  const initialAction = values?.nextAction ?? lead.next_action ?? "";
+  const [nextAction, setNextAction] = useState(initialAction);
+  const [selectedSuggestion, setSelectedSuggestion] = useState(actionSuggestions.includes(initialAction as (typeof actionSuggestions)[number]) ? initialAction : "manual");
 
   return (
     <section className="rounded-lg border border-[#dbe3dc] bg-white p-4">
@@ -36,7 +49,11 @@ export function LeadFollowUpForm({ lead, people, currentUserId }: { lead: LeadFo
         <input type="hidden" name="leadId" value={lead.id} />
         <div className="md:col-span-2">
           <label htmlFor="lead-next-action">Ação *</label>
-          <input id="lead-next-action" name="nextAction" required maxLength={240} defaultValue={values?.nextAction ?? lead.next_action ?? ""} placeholder="Ex.: Ligar para confirmar a visita" className={fieldClass(fieldErrors.nextAction)} />
+          <select aria-label="Sugestão de próxima ação" value={selectedSuggestion} onChange={(event) => { setSelectedSuggestion(event.target.value); if (event.target.value !== "manual") setNextAction(event.target.value); }} className="mb-2">
+            <option value="manual">Outra ação (escrever manualmente)</option>
+            {actionSuggestions.map((suggestion) => <option key={suggestion} value={suggestion}>{suggestion}</option>)}
+          </select>
+          <input id="lead-next-action" name="nextAction" required maxLength={240} value={nextAction} onChange={(event) => setNextAction(event.target.value)} placeholder="Ex.: Ligar para confirmar a visita" className={fieldClass(fieldErrors.nextAction)} />
           <FieldError error={fieldErrors.nextAction?.[0]} />
         </div>
         <div>

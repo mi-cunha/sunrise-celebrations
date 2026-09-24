@@ -2,9 +2,28 @@
 
 import { useActionState, useState } from "react";
 import { formatCurrencyFromCents, quoteEventAreaLabel, quoteEventAreas, quoteStatuses, quoteStatusLabel } from "@/lib/domain/quote";
-import { addQuoteItem, addQuoteProposalOption, confirmQuoteStatusWithDateConflict, removeQuoteItem, removeQuotePackage, removeQuoteProposalOption, setApprovedQuoteEditLock, setQuotePackage, setQuotePackageChoices, updateQuoteEventArea, updateQuoteItem, updateQuoteStatus, type QuoteFormState } from "../actions";
+import { addQuoteItem, addQuoteProposalOption, confirmQuoteStatusWithDateConflict, removeQuoteItem, removeQuotePackage, removeQuoteProposalOption, setApprovedQuoteEditLock, setQuotePackage, setQuotePackageChoices, updateQuoteEventArea, updateQuoteEventSchedule, updateQuoteItem, updateQuoteStatus, type QuoteFormState } from "../actions";
 
 const initialState: QuoteFormState = {};
+
+export function QuoteEventScheduleForm({ canEdit, quote }: { canEdit: boolean; quote: { id: string; desired_date: string | null; desired_date_mode?: string; desired_date_note?: string | null; desired_start_time?: string | null; desired_duration_minutes?: number | null } }) {
+  const [state, action, pending] = useActionState(updateQuoteEventSchedule, initialState);
+  if (!canEdit) return null;
+  const values = state.values;
+  return <form key={state.version ?? quote.id} action={action} className="mt-5 border-t border-slate-100 pt-4">
+    <h3 className="font-semibold">Data e horário do evento</h3><p className="mt-1 text-sm text-slate-600">Use “a definir” para enviar orçamento sem inventar uma data. A aprovação exige data exata.</p>
+    <input type="hidden" name="quoteId" value={quote.id} />
+    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <label>Quando seria?<select name="desiredDateMode" defaultValue={values?.desiredDateMode ?? quote.desired_date_mode ?? (quote.desired_date ? "exact" : "undefined")}><option value="exact">Data exata</option><option value="month_year">Mês e ano</option><option value="weekday">Dia da semana</option><option value="undefined">Data a definir</option></select></label>
+      <label>Data exata<input name="desiredDate" type="date" defaultValue={values?.desiredDate ?? quote.desired_date ?? ""} /></label>
+      <label>Detalhe da data<input name="desiredDateNote" maxLength={80} placeholder="Ex.: setembro de 2027 ou sábado" defaultValue={values?.desiredDateNote ?? quote.desired_date_note ?? ""} /></label>
+      <label>Horário de início<input name="desiredStartTime" type="time" defaultValue={values?.desiredStartTime ?? quote.desired_start_time ?? ""} /></label>
+      <label>Duração (horas)<input name="desiredDurationMinutes" type="number" min="0.5" max="24" step="0.5" placeholder="Ex.: 4" defaultValue={values?.desiredDurationMinutes ?? (quote.desired_duration_minutes ? String(quote.desired_duration_minutes / 60) : "")} /></label>
+    </div>
+    {state.error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">{state.error}</p>}{state.success && <p role="status" className="mt-3 rounded-lg bg-[#edf5ee] p-3 text-sm text-[#356451]">{state.success}</p>}
+    <button disabled={pending} className="mt-4 rounded-lg bg-[#18352d] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{pending ? "Salvando..." : "Salvar data e horário"}</button>
+  </form>;
+}
 
 type QuoteItemForEditor = {
   id: string;
