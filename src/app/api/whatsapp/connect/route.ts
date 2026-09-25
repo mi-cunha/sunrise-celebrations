@@ -8,7 +8,7 @@ import { isCoexistencePhone, metaConfiguration, metaRequest } from "@/lib/whatsa
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-const connectSchema = z.object({ code: z.string().min(20).max(4000), wabaId: z.string().regex(/^\d+$/), phoneNumberId: z.string().regex(/^\d+$/).optional() });
+const connectSchema = z.object({ code: z.string().min(20).max(4000), wabaId: z.string().regex(/^\d+$/).optional(), phoneNumberId: z.string().regex(/^\d+$/).optional() });
 const phoneSchema = z.object({ id: z.string(), display_phone_number: z.string().optional(), platform_type: z.string().optional(), is_on_biz_app: z.boolean().optional() });
 
 // Check dependencies before consuming a one-use authorization code.
@@ -36,7 +36,9 @@ export async function POST(request: Request) {
   try {
     const config = metaConfiguration();
     validateCredentialEncryption();
-    if (input.data.wabaId !== config.wabaId || (input.data.phoneNumberId && input.data.phoneNumberId !== config.phoneNumberId)) return NextResponse.json({ error: "Selecione a conta e o número autorizados para este CRM." }, { status: 403 });
+    // Session postMessage may be missing. Never trust client asset IDs: the
+    // exchanged token must still access the server-allowlisted WABA and phone.
+    if ((input.data.wabaId && input.data.wabaId !== config.wabaId) || (input.data.phoneNumberId && input.data.phoneNumberId !== config.phoneNumberId)) return NextResponse.json({ error: "Selecione a conta e o número autorizados para este CRM." }, { status: 403 });
     const admin = createAdminClient();
     const { error: schemaError } = await admin.from("whatsapp_connection_credentials").select("connection_id").limit(0);
     if (schemaError) throw new Error("Migração de credenciais não aplicada. O código não foi utilizado.");
@@ -56,9 +58,11 @@ export async function POST(request: Request) {
     if (!phone) throw new Error("O número autorizado não pertence à WABA selecionada.");
     // Never call /register: that is not the Business App coexistence flow.
     const coexists = isCoexistencePhone(phone);
-    const { data: existing, error: lookupError } = await admin.from("whatsapp_connections").select("id").eq("phone_number_id", phone.id).maybeSingle();
+    const { data: existing, error: lookupError } = await admin.from("whatsapp_connections").select("id,onboarding_id,connected_at,created_at").eq("phone_number_id", phone.id).maybeSingle();
     if (lookupError) throw new Error("Não foi possível consultar a conexão.");
-    const values = { waba_id: config.wabaId, phone_number_id: phone.id, display_phone_number: phone.display_phone_number ?? null, mode: "coexistence", status: "pending", onboarding_id: randomUUID(), connected_at: null, business_app_state: `${phone.is_on_biz_app ? "Business App ativo" : "Business App não confirmado"} · ${phone.platform_type ?? "plataforma desconhecida"}` };
+    // Reauthorizing does not prove a new Meta onboarding or reopen its 24h window.
+    const connectedAt = existing?.connected_at ?? existing?.created_at ?? new Date().toISOString();
+    const values = { waba_id: config.wabaId, phone_number_id: phone.id, display_phone_number: phone.display_phone_number ?? null, mode: "coexistence", status: "pending", onboarding_id: existing?.onboarding_id ?? randomUUID(), business_app_state: `${phone.is_on_biz_app ? "Business App ativo" : "Business App não confirmado"} · ${phone.platform_type ?? "plataforma desconhecida"}` };
     const saved = existing
       ? await admin.from("whatsapp_connections").update(values).eq("id", existing.id).select("id").single()
       : await admin.from("whatsapp_connections").insert(values).select("id").single();
@@ -73,7 +77,7 @@ export async function POST(request: Request) {
       subscriptions = subscriptionSchema.parse(await metaRequest(`${config.wabaId}/subscribed_apps`, token.data.access_token));
     }
     if (!subscriptions.data.some((item) => item.whatsapp_business_api_data.id === config.appId)) throw new Error("O aplicativo ainda não está inscrito nos eventos desta WABA.");
-    const { error: connectedError } = await admin.from("whatsapp_connections").update({ status: "connected", connected_at: new Date().toISOString() }).eq("id", saved.data.id);
+    const { error: connectedError } = await admin.from("whatsapp_connections").update({ status: "connected", connected_at: connectedAt }).eq("id", saved.data.id);
     if (connectedError) throw new Error("A Meta confirmou, mas o CRM não conseguiu salvar o estado final.");
     return NextResponse.json({ connected: true, phoneNumberId: phone.id });
   } catch (error) { return failure(error); }

@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { whatsappSdkOptions, whatsappSignupOptions } from "@/lib/whatsapp-sdk";
+import { finalizeWhatsApp } from "@/lib/whatsapp-finalize";
+import { useRouter } from "next/navigation";
 
 type Connection = {
   id: string;
@@ -29,6 +31,9 @@ declare global {
 }
 
 export function WhatsAppConnectionPanel({ appId, configId, connection, graphVersion }: { appId: string; configId: string; connection: Connection | null; graphVersion: string }) {
+  const router = useRouter();
+  const [importHistory, setImportHistory] = useState(false);
+  const finishing = useRef(false);
   const [sdkReady, setSdkReady] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [preflightReady, setPreflightReady] = useState(false);
@@ -92,33 +97,25 @@ export function WhatsAppConnectionPanel({ appId, configId, connection, graphVers
   }
 
   async function finishConnection(response: FacebookLoginResponse) {
+    if (finishing.current) return;
     const code = response.authResponse?.code;
     if (!code) {
       setConnecting(false);
       setFeedback({ type: "error", message: "O cadastro foi cancelado ou a Meta não autorizou a conexão. Nenhum código foi enviado ao servidor." });
       return;
     }
+    finishing.current = true;
     const { wabaId, phoneNumberId } = await waitForSignupData(signupData);
-    if (!code || !wabaId) {
-      setConnecting(false);
-      const missing = !code && !wabaId ? "o código e os identificadores" : !code ? "o código de autorização" : "os identificadores do WhatsApp";
-      setFeedback({ type: "error", message: `A Meta não retornou ${missing}. Finalize todas as etapas e leia o QR Code no WhatsApp Business.` });
-      return;
-    }
     try {
-      const result = await fetch("/api/whatsapp/connect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, wabaId, phoneNumberId }),
-      });
-      const data = await result.json() as { connected?: boolean; error?: string };
-      if (!result.ok || !data.connected) throw new Error(data.error ?? "Não foi possível confirmar a conexão.");
-      setFeedback({ type: "success", message: "WhatsApp Business conectado. Atualizando os dados…" });
-      window.location.reload();
+      const result = await finalizeWhatsApp({ code, wabaId, phoneNumberId }, importHistory);
+      setFeedback(result.syncError
+        ? { type: "error", message: `Conexão confirmada; histórico não solicitado com sucesso: ${result.syncError}` }
+        : { type: "success", message: result.syncAccepted ? "Conexão confirmada e importação solicitada. Mantenha o WhatsApp Business aberto; aguarde os webhooks para concluir o histórico." : "Conexão confirmada. A importação de histórico não foi solicitada." });
+      router.refresh();
     } catch (error) {
       setConnecting(false);
       setFeedback({ type: "error", message: error instanceof Error ? error.message : "Não foi possível concluir a conexão." });
-    }
+    } finally { finishing.current = false; setConnecting(false); }
   }
 
   const connected = connection?.status === "connected";
@@ -135,7 +132,7 @@ export function WhatsAppConnectionPanel({ appId, configId, connection, graphVers
   return (
     <div className="space-y-3">
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <Status label="Situação" value={connected ? "Conectado" : connection?.status === "error" ? "Com erro" : "Não conectado"} tone={connected ? "success" : "neutral"} />
+        <Status label="Situação" value={connected ? "Conectado" : connection?.status === "pending" ? "Finalização pendente no CRM" : connection?.status === "error" ? "Com erro" : "Não conectado"} tone={connected ? "success" : "neutral"} />
         <Status label="Número" value={connection?.display_phone_number ?? "Será identificado pela Meta"} />
         <Status label="Aplicativo" value={connection?.business_app_state ?? (connected ? "Coexistence" : "—")} />
         <Status label="Histórico" value={historyLabel(connection)} />
@@ -158,6 +155,7 @@ export function WhatsAppConnectionPanel({ appId, configId, connection, graphVers
       )}
 
       <div className="flex flex-wrap items-center gap-3">
+        <label className="text-sm"><input type="checkbox" checked={importHistory} disabled={connecting} onChange={(event) => setImportHistory(event.target.checked)} /> Solicitar contatos e histórico autorizado na Meta assim que a conexão for confirmada.</label>
         <button type="button" onClick={startConnection} disabled={!configurationReady || connecting || !sdkReady || !preflightReady} className="rounded-lg bg-[#083653] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
           {connecting ? "Conectando…" : connected ? "Reconectar WhatsApp" : "Conectar WhatsApp"}
         </button>
@@ -174,7 +172,7 @@ export function WhatsAppConnectionPanel({ appId, configId, connection, graphVers
 }
 
 async function waitForSignupData(reference: { current: { wabaId?: string; phoneNumberId?: string } }) {
-  for (let attempt = 0; attempt < 120; attempt += 1) {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
     if (reference.current.wabaId) return reference.current;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
