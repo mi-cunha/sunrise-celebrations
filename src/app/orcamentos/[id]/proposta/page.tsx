@@ -203,55 +203,6 @@ export default async function QuoteProposalPage({ params }: { params: Promise<{ 
           </div>
 
           <section className={styles.content}>
-            {selectedPackage?.event_package_catalog && (
-              <section className={styles.package}>
-                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#1f5f8b]">{isFinalProposal ? "Pacote definido" : "Proposta provisória"}</p>
-                    <h3 className="mt-2 text-2xl font-semibold">{selectedPackage.event_package_catalog.name}</h3>
-                    {selectedPackage.event_package_catalog.description && (
-                      <p className="mt-2 whitespace-pre-wrap leading-6 text-slate-700">{selectedPackage.event_package_catalog.description}</p>
-                    )}
-                    {!isFinalProposal && <p className="mt-3 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-[#1f5f8b] ring-1 ring-[#d7e5ef]">Alguns itens ainda serão escolhidos pelo cliente antes da proposta final.</p>}
-                  </div>
-                </div>
-                {fixedPackageItems.length > 0 && (
-                  <div className={styles.twoColumns}>
-                    {groupPackageItems(fixedPackageItems).map((group) => <PackageItemCategory key={group.label} group={group} />)}
-                  </div>
-                )}
-                {isFinalProposal && selectedPackageChoiceItems.length > 0 && (
-                  <div className="mt-5">
-                    <h4 className="text-sm font-semibold uppercase tracking-[0.14em] text-[#1f5f8b]">Escolhas definidas</h4>
-                    <div className={styles.twoColumns}>
-                      {groupPackageItems(selectedPackageChoiceItems).map((group) => <PackageItemCategory key={group.label} group={group} />)}
-                    </div>
-                  </div>
-                )}
-                {!isFinalProposal && pendingChoiceGroups.length > 0 && (
-                  <div className="mt-5 space-y-3">
-                    {pendingChoiceGroups.map((group) => (
-                      <div key={group.name} className="rounded-xl bg-white p-4 ring-1 ring-[#d7e5ef] print:break-inside-avoid">
-                        <h4 className="text-sm font-semibold text-[#1f5f8b]">{choiceGroupInstruction(group)}</h4>
-                        <ul className={styles.twoColumns}>
-                          {group.items.map((item) => (
-                            <li key={item.id} className="flex gap-2 text-sm">
-                              <span className="mt-1 h-3 w-3 shrink-0 rounded-sm border border-[#1f5f8b]" />
-                              <span>
-                                <span className="font-semibold">{item.name}</span>
-                                {item.description && <span className="block text-xs leading-5 text-slate-600">{item.description}</span>}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {selectedPackage.notes && <p className="mt-4 whitespace-pre-wrap rounded-xl bg-white p-4 text-sm leading-6 text-slate-700 ring-1 ring-[#d7e5ef]">{selectedPackage.notes}</p>}
-              </section>
-            )}
-
             <section className={styles.pricingSection}>
               {(items.length > 0 || selectedPackage?.event_package_catalog) && <div className={styles.pricing}>
                 <div className="min-w-[680px] print:min-w-0">
@@ -288,6 +239,55 @@ export default async function QuoteProposalPage({ params }: { params: Promise<{ 
                 <p className="mt-2 text-4xl font-semibold">{formatCurrencyFromCents(detail.total_amount_cents)}</p>
               </div>
             </section>
+
+            {selectedPackage?.event_package_catalog && (
+              <section className={styles.package}>
+                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#1f5f8b]">{isFinalProposal ? "Pacote definido" : "Proposta provisória"}</p>
+                    <h3 className="mt-2 text-2xl font-semibold">{selectedPackage.event_package_catalog.name}</h3>
+                    {selectedPackage.event_package_catalog.description && (
+                      <p className="mt-2 whitespace-pre-wrap leading-6 text-slate-700">{selectedPackage.event_package_catalog.description}</p>
+                    )}
+                    {!isFinalProposal && <p className="mt-3 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-[#1f5f8b] ring-1 ring-[#d7e5ef]">Alguns itens ainda serão escolhidos pelo cliente antes da proposta final.</p>}
+                  </div>
+                </div>
+                {fixedPackageItems.length > 0 && (
+                  <div className={styles.packageColumns}>
+                    {groupPackageItems(fixedPackageItems).map((group) => <PackageItemCategory key={group.label} group={group} />)}
+                  </div>
+                )}
+                {isFinalProposal && selectedPackageChoiceItems.length > 0 && (
+                  <div className="mt-5">
+                    <h4 className="text-sm font-semibold uppercase tracking-[0.14em] text-[#1f5f8b]">Escolhas definidas</h4>
+                    <div className={styles.packageColumns}>
+                      {groupPackageItems(selectedPackageChoiceItems).map((group) => <PackageItemCategory key={group.label} group={group} />)}
+                    </div>
+                  </div>
+                )}
+                {!isFinalProposal && pendingChoiceGroups.length > 0 && (
+                  <div className="mt-5 space-y-3">
+                    {pendingChoiceGroups.map((group) => (
+                      <div key={group.name} className="rounded-xl bg-white p-4 ring-1 ring-[#d7e5ef] print:break-inside-avoid">
+                        <h4 className="text-sm font-semibold text-[#1f5f8b]">{choiceGroupInstruction(group)}</h4>
+                        <ul className={styles.twoColumns}>
+                          {group.items.map((item) => (
+                            <li key={item.id} className="flex gap-2 text-sm">
+                              <span className="mt-1 h-3 w-3 shrink-0 rounded-sm border border-[#1f5f8b]" />
+                              <span>
+                                <span className="font-semibold">{item.name}</span>
+                                {item.description && <span className="block text-xs leading-5 text-slate-600">{item.description}</span>}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {selectedPackage.notes && <p className="mt-4 whitespace-pre-wrap rounded-xl bg-white p-4 text-sm leading-6 text-slate-700 ring-1 ring-[#d7e5ef]">{selectedPackage.notes}</p>}
+              </section>
+            )}
 
             {detail.notes?.trim() && <section className={styles.notes}><h2>Observações</h2><p>{detail.notes}</p></section>}
             <section className={styles.conditions}>
@@ -333,7 +333,7 @@ function groupPackageItems(items: EventPackageItem[]): PackageItemGroup[] {
     groups.set(group.label, [...(groups.get(group.label) ?? []), item]);
   }
   return Array.from(groups, ([label, groupedItems]) => ({ label, order: packageItemGroup(groupedItems[0]).order, items: groupedItems }))
-    .sort((left, right) => left.order.localeCompare(right.order, "pt-BR"));
+    .sort((left, right) => left.items.length - right.items.length || left.order.localeCompare(right.order, "pt-BR"));
 }
 
 function PackageItemCategory({ group }: { group: PackageItemGroup }) {
