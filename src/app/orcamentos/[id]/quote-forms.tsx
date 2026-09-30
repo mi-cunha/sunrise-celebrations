@@ -342,8 +342,9 @@ export function QuoteItemForm({ quoteId, catalogItems = [] }: { quoteId: string;
           {fieldErrors.quantity?.[0] && <p className="mt-1 text-sm text-red-700">{fieldErrors.quantity[0]}</p>}
         </div>
         <div>
-          <label htmlFor="unitPrice">Valor unitário</label>
-          <input id="unitPrice" name="unitPrice" inputMode="decimal" required placeholder="Ex.: 120,00" defaultValue={state.values?.unitPrice} className={fieldErrors.unitPrice ? "border-red-500 bg-red-50" : ""} />
+          <label htmlFor="unitPrice">Valor unitário <span className="font-normal text-slate-500">(opcional)</span></label>
+          <input id="unitPrice" name="unitPrice" inputMode="decimal" placeholder="Definir depois" defaultValue={state.values?.unitPrice} className={fieldErrors.unitPrice ? "border-red-500 bg-red-50" : ""} />
+          <p className="mt-1 text-xs text-slate-500">Sem valor, o item entra como R$ 0,00.</p>
           {fieldErrors.unitPrice?.[0] && <p className="mt-1 text-sm text-red-700">{fieldErrors.unitPrice[0]}</p>}
         </div>
       </div>
@@ -407,15 +408,15 @@ export function QuoteItemEditor({ canEdit, quoteId, item }: { canEdit: boolean; 
                 {fieldErrors.quantity?.[0] && <p className="mt-1 text-sm text-red-700">{fieldErrors.quantity[0]}</p>}
               </div>
               <div>
-                <label htmlFor={`unitPrice-${item.id}`}>Valor unitário</label>
+                <label htmlFor={`unitPrice-${item.id}`}>Valor unitário <span className="font-normal text-slate-500">(opcional)</span></label>
                 <input
                   id={`unitPrice-${item.id}`}
                   name="unitPrice"
                   inputMode="decimal"
-                  required
                   defaultValue={editState.values?.unitPrice ?? unitPrice.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                   className={fieldErrors.unitPrice ? "border-red-500 bg-red-50" : ""}
                 />
+                <p className="mt-1 text-xs text-slate-500">Deixe em branco para manter este item como R$ 0,00.</p>
                 {fieldErrors.unitPrice?.[0] && <p className="mt-1 text-sm text-red-700">{fieldErrors.unitPrice[0]}</p>}
               </div>
             </div>

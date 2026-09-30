@@ -29,9 +29,9 @@ export const quoteItemSchema = z.object({
   unitPrice: z
     .string()
     .trim()
-    .min(1, "Informe o valor unitário.")
-    .transform(parseCurrencyToCents)
-    .refine((value) => value > 0, "Informe um valor válido maior que zero."),
+    .optional()
+    .transform((value) => (!value ? 0 : parseCurrencyToCents(value)))
+    .refine((value) => value >= 0, "Informe um valor unitário válido."),
 });
 
 export const quoteItemUpdateSchema = quoteItemSchema.extend({

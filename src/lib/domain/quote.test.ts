@@ -20,7 +20,7 @@ describe("parseCurrencyToCents", () => {
 });
 
 describe("quoteItemSchema", () => {
-  it("rejects zero quantity and zero unit price", () => {
+  it("rejects zero quantity but allows an item without a unit price", () => {
     expect(
       quoteItemSchema.safeParse({
         quoteId,
@@ -30,14 +30,25 @@ describe("quoteItemSchema", () => {
       }).success,
     ).toBe(false);
 
-    expect(
-      quoteItemSchema.safeParse({
-        quoteId,
-        description: "Buffet",
-        quantity: "1",
-        unitPrice: "0",
-      }).success,
-    ).toBe(false);
+    const itemWithoutPrice = quoteItemSchema.safeParse({
+      quoteId,
+      description: "Buffet a definir",
+      quantity: "1",
+      unitPrice: "",
+    });
+
+    expect(itemWithoutPrice.success).toBe(true);
+    if (itemWithoutPrice.success) expect(itemWithoutPrice.data.unitPrice).toBe(0);
+
+    const itemWithZeroPrice = quoteItemSchema.safeParse({
+      quoteId,
+      description: "Buffet",
+      quantity: "1",
+      unitPrice: "0",
+    });
+
+    expect(itemWithZeroPrice.success).toBe(true);
+    if (itemWithZeroPrice.success) expect(itemWithZeroPrice.data.unitPrice).toBe(0);
   });
 
   it("rejects short descriptions and invalid unit prices", () => {
