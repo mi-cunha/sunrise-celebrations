@@ -27,7 +27,8 @@ export async function updateQuoteEventSchedule(_: QuoteFormState, formData: Form
   };
   const id = z.string().uuid().safeParse(raw.quoteId);
   const schedule = eventScheduleSchema.safeParse(raw);
-  if (!id.success || !schedule.success) return { error: "Revise data, horário e duração do evento.", fieldErrors: schedule.success ? undefined : schedule.error.flatten().fieldErrors, values: raw, version: Date.now() };
+  if (!id.success) return { error: "Não foi possível identificar o orçamento. Recarregue a página antes de salvar.", values: raw, version: Date.now() };
+  if (!schedule.success) return { error: "Revise data, horário e duração do evento.", fieldErrors: schedule.error.flatten().fieldErrors, values: raw, version: Date.now() };
   const { supabase } = await requireQuoteManager();
   const { error } = await supabase.rpc("update_quote_event_schedule", {
     p_quote_id: id.data,
@@ -37,7 +38,7 @@ export async function updateQuoteEventSchedule(_: QuoteFormState, formData: Form
     p_desired_start_time: schedule.data.desiredStartTime || null,
     p_desired_duration_minutes: schedule.data.desiredDurationMinutes ? schedule.data.desiredDurationMinutes * 60 : null,
   });
-  if (error) return { error: error.message, values: raw, version: Date.now() };
+  if (error) return { error: translateQuoteScheduleError(error.message), values: raw, version: Date.now() };
   revalidatePath(`/orcamentos/${id.data}`);
   revalidatePath(`/orcamentos/${id.data}/proposta`);
   revalidatePath("/painel");
@@ -75,8 +76,11 @@ export async function updateQuoteEventArea(_: QuoteFormState, formData: FormData
   if (!parsed.success) return { error: "Selecione a área do evento.", fieldErrors: parsed.error.flatten().fieldErrors, values: raw, version: Date.now() };
 
   const { supabase } = await requireQuoteManager();
-  const { error } = await supabase.from("quotes").update({ event_area: parsed.data.eventArea }).eq("id", parsed.data.quoteId);
-  if (error) return { error: error.message, values: raw, version: Date.now() };
+  const { error } = await supabase.rpc("update_quote_event_area", {
+    p_quote_id: parsed.data.quoteId,
+    p_event_area: parsed.data.eventArea,
+  });
+  if (error) return { error: translateQuoteAreaError(error.message), values: raw, version: Date.now() };
 
   revalidatePath(`/orcamentos/${parsed.data.quoteId}`);
   revalidatePath(`/orcamentos/${parsed.data.quoteId}/proposta`);
@@ -339,6 +343,21 @@ function translateQuoteApprovalError(message: string) {
   if (message.includes("permission denied")) return "Seu usuário não possui permissão para aprovar o orçamento e criar o evento.";
   if (message.includes("approve_quote_and_create_event")) return "Aplique a migration de aprovação transacional no Supabase antes de continuar.";
   return `Não foi possível aprovar o orçamento: ${message}`;
+}
+
+function translateQuoteScheduleError(message: string) {
+  if (message.includes("exact date is required")) return "Informe a data exata ou escolha outra opção em “Quando seria?”.";
+  if (message.includes("date detail is required")) return "Preencha o detalhe da data, como mês/ano ou dia da semana.";
+  if (message.includes("invalid duration")) return "A duração deve estar entre 0,5 e 24 horas.";
+  if (message.includes("permission denied")) return "Este orçamento não pode mais ser editado com seu acesso atual.";
+  if (message.includes("update_quote_event_schedule")) return "A atualização de data e horário ainda não está disponível no banco. Aplique a migration de confiabilidade do orçamento.";
+  return `Não foi possível salvar data e horário: ${message}`;
+}
+
+function translateQuoteAreaError(message: string) {
+  if (message.includes("permission denied")) return "Este orçamento não pode mais ser editado com seu acesso atual.";
+  if (message.includes("update_quote_event_area")) return "A atualização da área ainda não está disponível no banco. Aplique a migration de confiabilidade do orçamento.";
+  return `Não foi possível salvar a área: ${message}`;
 }
 
 export async function confirmQuoteStatusWithDateConflict(formData: FormData) {
