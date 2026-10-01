@@ -2,9 +2,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { createConversationSchema, conversationMessageSchema, handoffSchema } from "@/lib/domain/conversation";
+import { canAssumeConversation, canManageAiConversation, createConversationSchema, conversationMessageSchema, handoffSchema } from "@/lib/domain/conversation";
 import { leadSchema, leadStatuses } from "@/lib/domain/lead";
-import { requireLeadManager } from "@/lib/auth";
+import { requireLeadManager, requireUser } from "@/lib/auth";
 import { sendHumanWhatsApp } from "@/lib/whatsapp-outbound";
 
 export type ConversationFormState = { error?: string; success?: string; fieldErrors?: Record<string, string[]>; values?: Record<string, string>; version?: number };
@@ -35,7 +35,7 @@ export async function createSimulatedConversation(_: ConversationFormState, form
   const parsed = createConversationSchema.safeParse(raw);
   if (!parsed.success) return { error: "Revise a conversa simulada.", fieldErrors: parsed.error.flatten().fieldErrors, values: rawValues(raw), version: Date.now() };
   const { supabase, user } = await requireLeadManager();
-  const status = parsed.data.needsHuman ? "aguardando_humano" : "ia_triagem";
+  const status = parsed.data.needsHuman ? "awaiting_human" : "ai";
   const { data: conversation, error } = await supabase.from("conversations").insert({ lead_id: parsed.data.leadId, status, needs_human: parsed.data.needsHuman, handoff_reason: parsed.data.handoffReason ?? null, created_by: user.id }).select("id").single();
   if (error || !conversation) return { error: error?.message ?? "Não foi possível criar o atendimento.", values: rawValues(raw), version: Date.now() };
   await promoteLeadToAtendimento(supabase, parsed.data.leadId);
@@ -55,7 +55,7 @@ export async function addCustomerMessage(_: ConversationFormState, formData: For
   if (!conversation) return { error: "Atendimento não encontrado.", version: Date.now() };
   if (conversation.channel === "whatsapp_cloud") return { error: "Simulações não podem ser inseridas em uma conversa real do WhatsApp.", version: Date.now() };
   const messages = [{ conversation_id: parsed.data.conversationId, author: "cliente", body: parsed.data.body }];
-  if (!conversation.ai_paused && conversation.status === "ia_triagem") messages.push({ conversation_id: parsed.data.conversationId, author: "ia", body: "Mensagem recebida. Continuo em triagem e vou sinalizar a equipe se houver decisão sensível ou necessidade humana." });
+  if (!conversation.ai_paused && conversation.status === "ai") messages.push({ conversation_id: parsed.data.conversationId, author: "ia", body: "Mensagem recebida. Continuo em triagem e vou sinalizar a equipe se houver decisão sensível ou necessidade humana." });
   const { error } = await supabase.from("conversation_messages").insert(messages);
   if (error) return { error: "Não foi possível registrar a mensagem.", values: { body: parsed.data.body }, version: Date.now() };
   revalidatePath(`/atendimentos/${parsed.data.conversationId}`);
@@ -66,14 +66,14 @@ export async function addHumanMessage(_: ConversationFormState, formData: FormDa
   const parsed = conversationMessageSchema.safeParse({ conversationId: formData.get("conversationId"), body: formData.get("body") });
   if (!parsed.success) return { error: "Informe uma resposta.", fieldErrors: parsed.error.flatten().fieldErrors, values: { body: String(formData.get("body") ?? "") }, version: Date.now() };
 
-  const { supabase, user } = await requireLeadManager();
+  const { supabase, user } = await requireConversationAttendant();
   const { data: conversation } = await supabase.from("conversations").select("id,status,lead_id,channel,external_contact_id,external_phone_number_id").eq("id", parsed.data.conversationId).single();
   if (!conversation) return { error: "Atendimento não encontrado.", version: Date.now() };
-  if (conversation.status === "encerrado") return { error: "Este atendimento já foi encerrado.", values: { body: parsed.data.body }, version: Date.now() };
+  if (conversation.status === "closed") return { error: "Este atendimento já foi encerrado.", values: { body: parsed.data.body }, version: Date.now() };
 
   const { error: updateError } = await supabase
     .from("conversations")
-    .update({ status: "humano_assumiu", ai_paused: true, assigned_to: user.id, needs_human: false })
+    .update({ status: "human", ai_paused: true, ai_paused_at: new Date().toISOString(), assigned_to: user.id, needs_human: false })
     .eq("id", parsed.data.conversationId);
   if (updateError) return { error: "Não foi possível assumir o atendimento antes de responder.", values: { body: parsed.data.body }, version: Date.now() };
   await promoteLeadToAtendimento(supabase, conversation.lead_id);
@@ -170,15 +170,15 @@ export async function transferConversation(formData: FormData) {
   });
   if (!parsed.success) redirect("/atendimentos?error=invalid_transfer");
 
-  const { supabase, user } = await requireLeadManager();
+  const { supabase, user } = await requireConversationAttendant();
   const { data: assignee } = await supabase.from("profiles").select("id,display_name,is_active").eq("id", parsed.data.assigneeId).single();
   if (!assignee?.is_active) redirect(`/atendimentos/${parsed.data.conversationId}?error=transfer`);
 
   const { error: updateError } = await supabase
     .from("conversations")
-    .update({ status: "humano_assumiu", ai_paused: true, assigned_to: parsed.data.assigneeId, needs_human: false })
+    .update({ status: "human", ai_paused: true, ai_paused_at: new Date().toISOString(), assigned_to: parsed.data.assigneeId, needs_human: false })
     .eq("id", parsed.data.conversationId)
-    .neq("status", "encerrado");
+    .neq("status", "closed");
   if (updateError) redirect(`/atendimentos/${parsed.data.conversationId}?error=transfer`);
 
   const targetName = assignee.display_name ?? "outro atendente";
@@ -198,7 +198,7 @@ export async function requestHumanHandoff(formData: FormData) {
   const parsed = parseHandoffForm(formData);
   if (!parsed.success) redirect("/atendimentos?error=invalid_action");
   const { supabase } = await requireLeadManager();
-  const { error: updateError } = await supabase.from("conversations").update({ status: "aguardando_humano", needs_human: true, handoff_reason: parsed.data.reason ?? "IA sinalizou necessidade de humano." }).eq("id", parsed.data.conversationId);
+  const { error: updateError } = await supabase.from("conversations").update({ status: "awaiting_human", needs_human: true, handoff_reason: parsed.data.reason ?? "IA sinalizou necessidade de humano.", ai_transferred_at: new Date().toISOString() }).eq("id", parsed.data.conversationId).eq("status", "ai");
   if (updateError) redirect(`/atendimentos/${parsed.data.conversationId}?error=handoff`);
   const { error: messageError } = await supabase.from("conversation_messages").insert({ conversation_id: parsed.data.conversationId, author: "sistema", body: "IA sinalizou que este atendimento precisa de uma pessoa da equipe." });
   if (messageError) redirect(`/atendimentos/${parsed.data.conversationId}?error=handoff_message`);
@@ -210,12 +210,12 @@ export async function requestHumanHandoff(formData: FormData) {
 export async function assumeConversation(formData: FormData) {
   const parsed = parseHandoffForm(formData);
   if (!parsed.success) redirect("/atendimentos?error=invalid_action");
-  const { supabase, user } = await requireLeadManager();
-  const { data: conversation } = await supabase.from("conversations").select("lead_id").eq("id", parsed.data.conversationId).single();
-  const { error: updateError } = await supabase.from("conversations").update({ status: "humano_assumiu", ai_paused: true, assigned_to: user.id, needs_human: false, handoff_reason: parsed.data.reason ?? null }).eq("id", parsed.data.conversationId);
+  const { supabase, user } = await requireConversationAttendant();
+  const { data: conversation } = await supabase.from("conversations").select("lead_id,status").eq("id", parsed.data.conversationId).single();
+  const { error: updateError } = await supabase.from("conversations").update({ status: "human", ai_paused: true, ai_paused_at: new Date().toISOString(), assigned_to: user.id, needs_human: false, handoff_reason: parsed.data.reason ?? null }).eq("id", parsed.data.conversationId).neq("status", "closed");
   if (updateError) redirect(`/atendimentos/${parsed.data.conversationId}?error=assume`);
   if (conversation?.lead_id) await promoteLeadToAtendimento(supabase, conversation.lead_id);
-  const { error: messageError } = await supabase.from("conversation_messages").insert({ conversation_id: parsed.data.conversationId, author: "sistema", actor_id: user.id, body: "Atendimento assumido por humano. Respostas automáticas da IA pausadas para esta conversa." });
+  const { error: messageError } = await supabase.from("conversation_messages").insert({ conversation_id: parsed.data.conversationId, author: "sistema", actor_id: user.id, body: `Atendimento assumido por humano. Estado anterior: ${conversation?.status ?? "não informado"}. Respostas automáticas da IA pausadas para esta conversa.` });
   if (messageError) redirect(`/atendimentos/${parsed.data.conversationId}?error=assume_message`);
   revalidatePath("/atendimentos");
   revalidatePath(`/atendimentos/${parsed.data.conversationId}`);
@@ -226,10 +226,34 @@ export async function closeConversation(formData: FormData) {
   const parsed = parseHandoffForm(formData);
   if (!parsed.success) redirect("/atendimentos?error=invalid_action");
   const { supabase, user } = await requireLeadManager();
-  const { error: updateError } = await supabase.from("conversations").update({ status: "encerrado", ai_paused: true, assigned_to: user.id, needs_human: false }).eq("id", parsed.data.conversationId);
+  const { error: updateError } = await supabase.from("conversations").update({ status: "closed", ai_paused: true, ai_closed_at: new Date().toISOString(), assigned_to: user.id, needs_human: false }).eq("id", parsed.data.conversationId);
   if (updateError) redirect(`/atendimentos/${parsed.data.conversationId}?error=close`);
   const { error: messageError } = await supabase.from("conversation_messages").insert({ conversation_id: parsed.data.conversationId, author: "sistema", actor_id: user.id, body: "Atendimento encerrado." });
   if (messageError) redirect(`/atendimentos/${parsed.data.conversationId}?error=close_message`);
+  revalidatePath("/atendimentos");
+  revalidatePath(`/atendimentos/${parsed.data.conversationId}`);
+  redirect(`/atendimentos/${parsed.data.conversationId}`);
+}
+
+export async function pauseAiConversation(formData: FormData) {
+  const parsed = parseHandoffForm(formData);
+  if (!parsed.success) redirect("/atendimentos?error=invalid_action");
+  const { supabase, user } = await requireConversationAttendant();
+  const { error } = await supabase.from("conversations").update({ status: "paused_ai", ai_paused: true, ai_paused_at: new Date().toISOString(), needs_human: false }).eq("id", parsed.data.conversationId).eq("status", "ai");
+  if (error) redirect(`/atendimentos/${parsed.data.conversationId}?error=pause`);
+  await supabase.from("conversation_messages").insert({ conversation_id: parsed.data.conversationId, author: "sistema", actor_id: user.id, body: "IA pausada manualmente." });
+  revalidatePath("/atendimentos");
+  revalidatePath(`/atendimentos/${parsed.data.conversationId}`);
+  redirect(`/atendimentos/${parsed.data.conversationId}`);
+}
+
+export async function resumeAiConversation(formData: FormData) {
+  const parsed = parseHandoffForm(formData);
+  if (!parsed.success) redirect("/atendimentos?error=invalid_action");
+  const { supabase, user } = await requireAiManager();
+  const { error } = await supabase.from("conversations").update({ status: "ai", ai_paused: false, needs_human: false, assigned_to: null, handoff_reason: null, ai_started_at: new Date().toISOString() }).eq("id", parsed.data.conversationId).eq("status", "paused_ai");
+  if (error) redirect(`/atendimentos/${parsed.data.conversationId}?error=resume`);
+  await supabase.from("conversation_messages").insert({ conversation_id: parsed.data.conversationId, author: "sistema", actor_id: user.id, body: "IA retomada por gestão. A próxima mensagem do cliente seguirá a triagem inicial." });
   revalidatePath("/atendimentos");
   revalidatePath(`/atendimentos/${parsed.data.conversationId}`);
   redirect(`/atendimentos/${parsed.data.conversationId}`);
@@ -268,4 +292,16 @@ async function promoteLeadToAtendimento(supabase: Awaited<ReturnType<typeof requ
     p_lead_id: leadId,
     p_status: "em_atendimento",
   });
+}
+
+async function requireConversationAttendant() {
+  const context = await requireUser();
+  if (!canAssumeConversation(context.permissions)) redirect("/painel?error=forbidden");
+  return context;
+}
+
+async function requireAiManager() {
+  const context = await requireUser();
+  if (!canManageAiConversation(context.permissions)) redirect("/painel?error=forbidden");
+  return context;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createConversationSchema, conversationMessageSchema, conversationStatusLabel } from "./conversation";
+import { canAssumeConversation, canManageAiConversation, createConversationSchema, conversationMessageSchema, conversationStatusLabel } from "./conversation";
 
 describe("conversation validation", () => {
   it("requires a lead and an initial message", () => {
@@ -17,6 +17,15 @@ describe("conversation validation", () => {
   });
 
   it("labels statuses", () => {
-    expect(conversationStatusLabel("humano_assumiu")).toBe("Humano assumiu");
+    expect(conversationStatusLabel("human")).toBe("Humano assumiu");
+  });
+});
+
+describe("conversation permissions", () => {
+  it("permite assumir somente atendimento, gerência e admin; e retomar IA apenas à gestão", () => {
+    expect(canAssumeConversation(["atendimento"])).toBe(true);
+    expect(canAssumeConversation(["direcao"])).toBe(false);
+    expect(canManageAiConversation(["gerencia"])).toBe(true);
+    expect(canManageAiConversation(["atendimento"])).toBe(false);
   });
 });

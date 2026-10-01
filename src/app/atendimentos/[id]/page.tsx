@@ -3,13 +3,13 @@ import { Fragment, type ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { SetupNotice } from "@/components/setup-notice";
-import { conversationStatusLabel } from "@/lib/domain/conversation";
+import { canAssumeConversation, canManageAiConversation, conversationStatusLabel } from "@/lib/domain/conversation";
 import { canManageLeads, defaultEventTypes, defaultLeadSources } from "@/lib/domain/lead";
 import { formatCurrencyFromCents, quoteStatusLabel } from "@/lib/domain/quote";
 import { requireUser } from "@/lib/auth";
 import { formatDateTime } from "@/lib/date-format";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
-import { assumeConversation, closeConversation, requestHumanHandoff, transferConversation } from "../actions";
+import { assumeConversation, closeConversation, pauseAiConversation, requestHumanHandoff, resumeAiConversation, transferConversation } from "../actions";
 import { LeadQuickEditForm, LeadStatusForm } from "./lead-quick-edit";
 import { CustomerMessageForm, HumanReplyForm } from "./message-form";
 import { createQuoteFromLead } from "@/app/orcamentos/actions";
@@ -86,6 +86,8 @@ type QuoteSummary = {
   created_at: string;
 };
 
+type AiTriage = { identified_event_type: string | null; desired_period: string | null; guest_count: number | null; missing_data: string[]; conversation_summary: string | null; suggested_next_action: string | null; confidence: number | null; handoff_reason: string | null };
+
 const actionErrorMessages: Record<string, string> = {
   handoff: "Não foi possível sinalizar humano. Confira suas permissões e tente novamente.",
   handoff_message: "O status foi alterado, mas não foi possível registrar a mensagem de sistema.",
@@ -103,6 +105,8 @@ export default async function ConversationDetailPage({ params, searchParams }: {
   const selectedQuoteId = Array.isArray(orcamento) ? orcamento[0] : orcamento;
   const { supabase, permissions } = await requireUser();
   const canManage = canManageLeads(permissions);
+  const canAssume = canAssumeConversation(permissions);
+  const canManageAi = canManageAiConversation(permissions);
 
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
@@ -130,6 +134,8 @@ export default async function ConversationDetailPage({ params, searchParams }: {
   if (!conversation) notFound();
 
   const detail = conversation as unknown as ConversationDetail;
+  const { data: triage } = await supabase.from("conversation_ai_triage").select("identified_event_type,desired_period,guest_count,missing_data,conversation_summary,suggested_next_action,confidence,handoff_reason").eq("conversation_id", id).maybeSingle();
+  const aiTriage = triage as AiTriage | null;
   const { data: options } = await supabase.from("option_catalog").select("kind,name").eq("is_active", true).order("sort_order").order("name");
   const eventTypes = options?.filter((option) => option.kind === "event_type") ?? defaultEventTypes.map((name) => ({ name }));
   const leadSources = options?.filter((option) => option.kind === "lead_source") ?? defaultLeadSources.map((name) => ({ name }));
@@ -137,7 +143,7 @@ export default async function ConversationDetailPage({ params, searchParams }: {
   const { data: staffRows } = canManage
     ? await supabase.from("profiles").select("id,display_name,is_active,user_permissions(permission)").eq("is_active", true).order("display_name")
     : { data: [] };
-  const staff = ((staffRows ?? []) as unknown as StaffRow[]).filter((row) => row.user_permissions?.some((permission) => permission.permission === "atendimento" || permission.permission === "admin_owner"));
+  const staff = ((staffRows ?? []) as unknown as StaffRow[]).filter((row) => row.user_permissions?.some((permission) => ["atendimento", "gerencia", "admin_owner"].includes(permission.permission)));
   const { data: messages, error: messagesError } = await supabase
     .from("conversation_messages")
     .select("id,author,body,created_at,external_created_at,external_message_id,message_origin,delivery_status,profiles(display_name)")
@@ -163,7 +169,7 @@ export default async function ConversationDetailPage({ params, searchParams }: {
   }));
   const messageRows = ([...importedRows, ...liveRows])
     .sort((left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime());
-  const isClosed = detail.status === "encerrado";
+  const isClosed = detail.status === "closed";
   const leadHistory = [...(detail.leads?.lead_history ?? [])].sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime()).slice(0, 6);
   const leadChecklist = buildLeadChecklist(detail.leads);
   const missingItems = leadChecklist.filter((item) => !item.complete);
@@ -201,7 +207,7 @@ export default async function ConversationDetailPage({ params, searchParams }: {
             {detail.ai_paused && <span className="rounded-full bg-[#fff5e6] px-3 py-1 text-sm text-[#744c15]">IA pausada</span>}
             {detail.needs_human && <span className="rounded-full bg-red-50 px-3 py-1 text-sm text-red-700">Precisa humano</span>}
             <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">
-              Responsável: {detail.assignee?.display_name ?? "não assumido"}
+              Atendendo agora: {detail.assignee?.display_name ?? "ninguém"}
             </span>
             <span className="rounded-full bg-[#dcecf6] px-3 py-1 text-sm text-[#083653]">{detail.channel === "whatsapp_cloud" ? "WhatsApp oficial" : "Simulação"}</span>
           </div>
@@ -220,7 +226,7 @@ export default async function ConversationDetailPage({ params, searchParams }: {
             })}
           </ol>
 
-          {canManage && (
+          {canAssume && (
             <div className="mt-6 grid gap-4 xl:grid-cols-2">
               <HumanReplyForm conversationId={id} disabled={isClosed} templates={responseTemplates ?? []} />
               {detail.channel !== "whatsapp_cloud" && <CustomerMessageForm conversationId={id} disabled={isClosed} />}
@@ -279,6 +285,10 @@ export default async function ConversationDetailPage({ params, searchParams }: {
             </ul>
           </SidebarToggle>
 
+          {aiTriage && <SidebarToggle title="Triagem da IA" defaultOpen>
+            <dl className="mt-3 space-y-2 text-sm"><div><dt className="text-slate-500">Resumo</dt><dd>{aiTriage.conversation_summary ?? "Ainda não disponível"}</dd></div><div><dt className="text-slate-500">Dados identificados</dt><dd>{[aiTriage.identified_event_type, aiTriage.desired_period, aiTriage.guest_count ? `${aiTriage.guest_count} convidados` : null].filter(Boolean).join(" · ") || "Ainda em coleta"}</dd></div><div><dt className="text-slate-500">Faltando</dt><dd>{aiTriage.missing_data?.join(", ") || "Nenhum"}</dd></div><div><dt className="text-slate-500">Próxima ação</dt><dd>{aiTriage.suggested_next_action ?? "A definir"}</dd></div>{aiTriage.handoff_reason && <div><dt className="text-slate-500">Motivo para humano</dt><dd className="text-red-700">{aiTriage.handoff_reason}</dd></div>}</dl>
+          </SidebarToggle>}
+
           {canManage && detail.leads && (
             <>
               <LeadStatusForm conversationId={id} lead={detail.leads} />
@@ -334,10 +344,10 @@ export default async function ConversationDetailPage({ params, searchParams }: {
             )}
           </SidebarToggle>
 
-          {canManage && (
+          {canAssume && (
             <SidebarToggle title="Ações" defaultOpen>
               <div className="mt-4 space-y-3">
-                {detail.status === "ia_triagem" && (
+                {detail.status === "ai" && (
                   <form action={requestHumanHandoff}>
                     <input type="hidden" name="conversationId" value={id} />
                     <input type="hidden" name="reason" value="Sinalização manual da equipe." />
@@ -346,7 +356,13 @@ export default async function ConversationDetailPage({ params, searchParams }: {
                     </button>
                   </form>
                 )}
-                {detail.status !== "humano_assumiu" && detail.status !== "encerrado" && (
+                {detail.status === "ai" && (
+                  <form action={pauseAiConversation}><input type="hidden" name="conversationId" value={id} /><button className="w-full rounded-lg border border-[#dbe3dc] px-4 py-3 font-semibold text-[#18352d]">Pausar IA</button></form>
+                )}
+                {detail.status === "paused_ai" && canManageAi && (
+                  <form action={resumeAiConversation}><input type="hidden" name="conversationId" value={id} /><button className="w-full rounded-lg border border-[#0f5f8f] bg-[#e6f1f6] px-4 py-3 font-semibold text-[#083653]">Retomar IA</button></form>
+                )}
+                {detail.status !== "human" && detail.status !== "closed" && (
                   <form action={assumeConversation}>
                     <input type="hidden" name="conversationId" value={id} />
                     <button className="w-full rounded-lg bg-[#18352d] px-4 py-3 font-semibold text-white shadow-sm transition hover:bg-[#23483d] hover:shadow active:scale-[0.99] active:bg-[#102820]">
@@ -354,7 +370,7 @@ export default async function ConversationDetailPage({ params, searchParams }: {
                     </button>
                   </form>
                 )}
-                {detail.status !== "encerrado" && (
+                {detail.status !== "closed" && (
                   <form action={closeConversation}>
                     <input type="hidden" name="conversationId" value={id} />
                     <button className="w-full rounded-lg border border-[#dbe3dc] px-4 py-3 font-semibold text-[#18352d] transition hover:border-[#b7c8bb] hover:bg-[#f6fbf7] active:scale-[0.99] active:bg-[#edf5ee]">
@@ -362,7 +378,7 @@ export default async function ConversationDetailPage({ params, searchParams }: {
                     </button>
                   </form>
                 )}
-                {detail.status !== "encerrado" && staff.length > 0 && (
+                {detail.status !== "closed" && staff.length > 0 && (
                   <form action={transferConversation} className="border-t border-slate-100 pt-3">
                     <input type="hidden" name="conversationId" value={id} />
                     <label htmlFor="assigneeId">Transferir para</label>

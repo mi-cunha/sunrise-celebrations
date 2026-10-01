@@ -10,7 +10,7 @@ beforeAll(async () => {
     create schema auth; create table auth.users(id uuid primary key);
     create function auth.uid() returns uuid language sql as $$ select '${actor}'::uuid $$;
     grant usage on schema public,auth to authenticated,anon,service_role;`);
-  for (const file of ["202608110001_initial_sunrise.sql", "202608120002_conversation_triage.sql", "202608250007_whatsapp_cloud.sql", "202608270001_whatsapp_coexistence_foundation.sql", "202608270003_whatsapp_history.sql", "202609130001_coexistence_validation.sql"]) {
+  for (const file of ["202608110001_initial_sunrise.sql", "202608120002_conversation_triage.sql", "202608250007_whatsapp_cloud.sql", "202608270001_whatsapp_coexistence_foundation.sql", "202608270003_whatsapp_history.sql", "202609130001_coexistence_validation.sql", "202610010003_ai_initial_triage.sql"]) {
     await db.exec(readFileSync(new URL(`../../supabase/migrations/${file}`, import.meta.url), "utf8"));
   }
   await db.exec(readFileSync(new URL("../../supabase/migrations/202609130002_whatsapp_review_operations.sql", import.meta.url), "utf8"));
@@ -27,10 +27,10 @@ async function ingest(id: string, phone = "10001", echo = false) {
 }
 
 describe("actual WhatsApp migrations in isolated PostgreSQL", () => {
-  it("makes webhook retries idempotent, starts paused and separates phone numbers", async () => {
+  it("makes webhook retries idempotent, starts AI triage and separates phone numbers", async () => {
     await ingest("wamid.fixture1"); await ingest("wamid.fixture1"); await ingest("wamid.fixture2", "10002");
     const { rows } = await db.query("select external_phone_number_id,ai_paused,status from public.conversations order by external_phone_number_id");
-    expect(rows).toEqual([{ external_phone_number_id: "10001", ai_paused: true, status: "aguardando_humano" }, { external_phone_number_id: "10002", ai_paused: true, status: "aguardando_humano" }]);
+    expect(rows).toEqual([{ external_phone_number_id: "10001", ai_paused: false, status: "ai" }, { external_phone_number_id: "10002", ai_paused: false, status: "ai" }]);
     expect((await db.query("select count(*)::int as n from public.conversation_messages")).rows).toEqual([{ n: 2 }]);
     expect((await db.query("select count(*)::int as n from public.leads")).rows).toEqual([{ n: 1 }]);
   });
@@ -67,7 +67,7 @@ describe("actual WhatsApp migrations in isolated PostgreSQL", () => {
     try {
       await db.query("insert into public.conversation_messages(conversation_id,author,actor_id,body,external_message_id,delivery_status) select id,'humano',$1,'Legacy fixture','wamid.legacy','sent' from public.conversations limit 1", [actor]);
       await db.exec("insert into public.conversation_messages(conversation_id,author,body) select id,'sistema','Legacy handoff' from public.conversations limit 1");
-      await db.exec("update public.conversations set status='humano_assumiu',ai_paused=true");
+      await db.exec("update public.conversations set status='human',ai_paused=true");
       expect((await db.query("select delivery_status from public.conversation_messages where external_message_id='wamid.legacy'")).rows).toEqual([{ delivery_status: "sent" }]);
     } finally { await db.exec("reset role"); }
   });

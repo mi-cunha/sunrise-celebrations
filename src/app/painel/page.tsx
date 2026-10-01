@@ -69,7 +69,7 @@ export default async function Dashboard() {
   const today = new Date().toISOString().slice(0, 10);
   const weekEnd = weekEndKey();
 
-  const humanQueue = conversationsRows.filter((conversation) => conversation.status !== "encerrado" && (conversation.needs_human || conversation.status === "aguardando_humano"));
+  const humanQueue = conversationsRows.filter((conversation) => conversation.status !== "closed" && (conversation.needs_human || conversation.status === "awaiting_human"));
   const openQuotes = quoteRows.filter((quote) => quote.status === "rascunho" || quote.status === "em_elaboracao");
   const openQuoteContacts = Array.from(
     openQuotes.reduce((groups, quote) => {

@@ -26,10 +26,11 @@ const statusFilters = [
 ] as const;
 
 const priorityByStatus: Record<string, number> = {
-  aguardando_humano: 1,
-  ia_triagem: 2,
-  humano_assumiu: 3,
-  encerrado: 4,
+  awaiting_human: 1,
+  ai: 2,
+  human: 3,
+  paused_ai: 4,
+  closed: 5,
 };
 
 export default async function ConversationsPage({
@@ -72,9 +73,9 @@ export default async function ConversationsPage({
 
       <section className="mt-6 grid grid-cols-2 gap-3 xl:grid-cols-4">
         <MetricCard label="Precisa humano" value={counts.precisa_humano} tone="danger" />
-        <MetricCard label="IA em triagem" value={counts.ia_triagem} />
-        <MetricCard label="Humano assumiu" value={counts.humano_assumiu} />
-        <MetricCard label="Encerrados" value={counts.encerrado} />
+        <MetricCard label="IA atendendo" value={counts.ai} />
+        <MetricCard label="Humano assumiu" value={counts.human} />
+        <MetricCard label="Encerrados" value={counts.closed} />
       </section>
 
       <nav className="mt-6 flex flex-wrap gap-2" aria-label="Filtros de atendimentos">
@@ -221,12 +222,12 @@ function countConversations(conversations: Conversation[]) {
       if (conversation.status in totals) totals[conversation.status as keyof typeof totals] += 1;
       return totals;
     },
-    { todos: 0, precisa_humano: 0, ia_triagem: 0, aguardando_humano: 0, humano_assumiu: 0, encerrado: 0 },
+    { todos: 0, precisa_humano: 0, ai: 0, awaiting_human: 0, human: 0, paused_ai: 0, closed: 0 },
   );
 }
 
 function needsHumanAttention(conversation: Conversation) {
-  return conversation.status !== "encerrado" && (conversation.needs_human || conversation.status === "aguardando_humano");
+  return conversation.status !== "closed" && (conversation.needs_human || conversation.status === "awaiting_human");
 }
 
 function countForFilter(counts: ReturnType<typeof countConversations>, filter: string) {

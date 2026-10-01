@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { processInboundWhatsAppAi } from "@/lib/ai/whatsapp-triage";
 import { parseWhatsAppWebhook, verifyWhatsAppSignature, type WhatsAppHistoryChunk, type WhatsAppInboundText, type WhatsAppMessageEcho, type WhatsAppSyncedContact } from "@/lib/whatsapp";
 
 export const runtime = "nodejs";
@@ -58,12 +59,14 @@ export async function POST(request: Request) {
 
 async function receiveMessage(message: WhatsAppInboundText) {
   await ensureWhatsAppConnection(message.phoneNumberId, message.wabaId);
-  return ingestMessage({
+  const outcome = await ingestMessage({
     contact: message.from, phone: message.phoneNumberId, id: message.messageId,
     name: message.contactName, body: message.body, timestamp: message.timestamp, echo: false,
     type: message.messageType ?? "text", mediaId: message.mediaId,
     mimeType: message.mediaMimeType, filename: message.mediaFilename,
   });
+  if (outcome === "appended") await processInboundWhatsAppAi(message.messageId);
+  return outcome;
 }
 
 async function receiveEcho(echo: WhatsAppMessageEcho) {
