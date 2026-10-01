@@ -12,6 +12,7 @@ import { LeadDetailEditForm } from "./lead-detail-edit-form";
 import { LeadFollowUpForm } from "./lead-follow-up-form";
 import { LeadStageForm } from "./lead-stage-form";
 import { DeleteQuoteButton } from "./delete-quote-button";
+import { StartConversationForm } from "./start-conversation-form";
 
 type Option = { kind?: string; name: string };
 
@@ -42,7 +43,7 @@ export default async function LeadDetail({
   const canManage = canManageLeads(permissions);
   const canDeleteQuotes = permissions.some((permission) => ["atendimento", "financeiro", "admin_owner"].includes(permission));
 
-  const [{ data: lead }, { data: options }, { data: people }, { data: timeline }] = await Promise.all([
+  const [{ data: lead }, { data: options }, { data: people }, { data: timeline }, { data: conversations }, { data: initialTemplates }] = await Promise.all([
     supabase
       .from("leads")
       .select("*,potential_events(*),lead_history(*, profiles(display_name)),quotes(id,title,status,total_amount_cents,created_at,contracted_events(id,status))")
@@ -51,6 +52,8 @@ export default async function LeadDetail({
     supabase.from("option_catalog").select("kind,name").eq("is_active", true).order("sort_order").order("name"),
     canManage ? supabase.rpc("get_active_operational_profiles") : Promise.resolve({ data: [] }),
     canManage ? supabase.rpc("get_lead_timeline", { p_lead_id: id }) : Promise.resolve({ data: [] }),
+    canManage ? supabase.from("conversations").select("id").eq("lead_id", id).limit(1) : Promise.resolve({ data: [] }),
+    canManage ? supabase.from("crm_message_templates").select("id,title,body,whatsapp_template_name").eq("channel", "whatsapp").in("kind", ["primeiro_contato", "retorno_cadastro", "convite_visita", "retorno_orcamento"]).eq("is_active", true).order("sort_order") : Promise.resolve({ data: [] }),
   ]);
 
   if (!lead) notFound();
@@ -137,6 +140,7 @@ export default async function LeadDetail({
 
           {canManage && <LeadDetailEditForm lead={lead} eventTypes={safeEventTypes} leadSources={safeLeadSources} people={activePeople} />}
           {canManage && <LeadFollowUpForm lead={lead} people={activePeople} currentUserId={user.id} />}
+          {canManage && !(conversations?.length) && <StartConversationForm leadId={lead.id} leadName={lead.name} templates={initialTemplates ?? []} />}
 
           <section className="overflow-hidden rounded-lg border border-[#dbe3dc] bg-white">
             <div className="border-b border-[#edf1ee] p-4">

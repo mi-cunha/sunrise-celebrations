@@ -21,7 +21,7 @@ export const contractedEventPaymentMethods = ["pix", "cartao_credito", "cartao_d
 export type ContractedEventPaymentMethod = (typeof contractedEventPaymentMethods)[number];
 
 export const contractedEventCostCategories = ["buffet", "bebidas", "equipe", "fornecedor", "decoracao", "estrutura", "transporte", "cortesia", "comissao", "outro"] as const;
-export const contractedEventCostStatuses = ["previsto", "confirmado", "pago", "cancelado"] as const;
+export const contractedEventCostStatuses = ["provisionada", "previsto", "confirmado", "pago", "cancelado"] as const;
 export const contractedEventHospitalityCategories = ["cortesia", "recepcao", "mesa", "pos_evento", "material_impresso"] as const;
 export const contractedEventHospitalityStatuses = ["planejado", "aprovado", "preparado", "concluido", "cancelado"] as const;
 
@@ -397,7 +397,7 @@ export function contractedEventCostCategoryLabel(category: string) {
 }
 
 export function contractedEventCostStatusLabel(status: string) {
-  const labels: Record<string, string> = { previsto: "Previsto", confirmado: "Confirmado", pago: "Pago", cancelado: "Cancelado" };
+  const labels: Record<string, string> = { provisionada: "Provisionada", previsto: "Previsto", confirmado: "Confirmado", pago: "Pago", cancelado: "Cancelado" };
   return labels[status] ?? status;
 }
 

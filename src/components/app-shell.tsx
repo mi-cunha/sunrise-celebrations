@@ -3,10 +3,14 @@ import Link from "next/link";
 import { signOut } from "@/app/painel/actions";
 import { requireUser } from "@/lib/auth";
 import { AppNavigation } from "./app-navigation";
+import { InboxNotifications } from "./inbox-notifications";
 
 export async function AppShell({ children, title }: { children: React.ReactNode; title: string }) {
   const { supabase, permissions, profile } = await requireUser();
-  const { data: settings } = await supabase.from("company_settings").select("logo_url").eq("id", true).maybeSingle();
+  const [{ data: settings }, { data: notificationPreference }] = await Promise.all([
+    supabase.from("company_settings").select("logo_url").eq("id", true).maybeSingle(),
+    supabase.from("user_notification_preferences").select("sound_enabled,browser_enabled").eq("user_id", profile.id).maybeSingle(),
+  ]);
   const canSeeCrm = permissions.some((p) => ["atendimento", "gerencia", "direcao", "admin_owner"].includes(p));
   const canSeeFinancial = permissions.some((p) => ["financeiro", "gerencia", "direcao", "admin_owner"].includes(p));
   const navigation = <AppNavigation canSeeCrm={canSeeCrm} canSeeFinancial={canSeeFinancial} />;
@@ -25,7 +29,7 @@ export async function AppShell({ children, title }: { children: React.ReactNode;
       <header className="workspace-topbar">
         <details className="mobile-navigation"><summary aria-label="Abrir navegação">☰ <span>Menu</span></summary><div className="mobile-navigation-panel">{brand}{navigation}<form action={signOut}><button className="workspace-button secondary">Sair da conta</button></form></div></details>
         <p className="workspace-breadcrumb">Sunrise <span>/</span> <strong>{title}</strong></p>
-        <Link href="/ajuda" className="help-link"><span aria-hidden="true">?</span> Ajuda</Link>
+        <div className="flex items-center gap-3"><InboxNotifications userId={profile.id} enabled={canSeeCrm} preference={notificationPreference} /><Link href="/ajuda" className="help-link"><span aria-hidden="true">?</span> Ajuda</Link></div>
       </header>
       <main id="main-content" className="workspace-content" tabIndex={-1}>
         <h1 className="workspace-title">{title}</h1>

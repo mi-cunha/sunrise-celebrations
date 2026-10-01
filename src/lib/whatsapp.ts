@@ -199,3 +199,16 @@ export async function sendWhatsAppText({ body, phoneNumberId, to }: { body: stri
   if (!result.success) throw new MetaRequestError(undefined, true);
   return result.data.messages[0].id;
 }
+
+export async function sendWhatsAppTemplate({ templateName, language, phoneNumberId, to }: { templateName: string; language: string; phoneNumberId: string; to: string }) {
+  const { connectionCredential, metaRequest, MetaRequestError } = await import("@/lib/whatsapp-meta");
+  const { token } = await connectionCredential(phoneNumberId);
+  const result = z.object({ messages: z.array(z.object({ id: z.string().min(1) })).min(1) }).safeParse(await metaRequest(`${phoneNumberId}/messages`, token, {
+    messaging_product: "whatsapp",
+    to,
+    type: "template",
+    template: { name: templateName, language: { code: language } },
+  }));
+  if (!result.success) throw new MetaRequestError(undefined, true);
+  return result.data.messages[0].id;
+}
