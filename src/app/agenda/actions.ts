@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
+import { canManageCalendar } from "@/lib/domain/calendar";
 
 export type CalendarFormState = { error?: string; success?: string; fieldErrors?: Record<string, string[]>; values?: Record<string, string>; version?: number };
 
@@ -30,7 +31,7 @@ export async function saveCalendarEntry(_: CalendarFormState, formData: FormData
   if (!parsed.success) return { error: "Revise os campos destacados.", fieldErrors: parsed.error.flatten().fieldErrors, values: raw as Record<string, string>, version: Date.now() };
 
   const { supabase, user, permissions } = await requireUser();
-  if (!permissions.some((permission) => permission === "gerencia" || permission === "direcao" || permission === "admin_owner")) return { error: "Você não tem permissão para alterar a agenda.", version: Date.now() };
+  if (!canManageCalendar(permissions)) return { error: "Você não tem permissão para alterar a agenda.", version: Date.now() };
   const payload = { title: parsed.data.title, entry_type: parsed.data.entryType, start_date: parsed.data.startDate, end_date: parsed.data.endDate, notes: parsed.data.notes || null };
   const result = parsed.data.id
     ? await supabase.from("calendar_entries").update(payload).eq("id", parsed.data.id)
@@ -44,7 +45,7 @@ export async function deleteCalendarEntry(_: CalendarFormState, formData: FormDa
   const parsed = deleteSchema.safeParse({ id: formData.get("id") });
   if (!parsed.success) return { error: "Data inválida.", version: Date.now() };
   const { supabase, permissions } = await requireUser();
-  if (!permissions.some((permission) => permission === "gerencia" || permission === "direcao" || permission === "admin_owner")) return { error: "Você não tem permissão para alterar a agenda.", version: Date.now() };
+  if (!canManageCalendar(permissions)) return { error: "Você não tem permissão para alterar a agenda.", version: Date.now() };
   const { error } = await supabase.from("calendar_entries").delete().eq("id", parsed.data.id);
   if (error) return { error: error.message, version: Date.now() };
   revalidatePath("/agenda");

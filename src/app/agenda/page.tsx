@@ -3,6 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { SetupNotice } from "@/components/setup-notice";
 import { requireUser } from "@/lib/auth";
 import { contractedEventStatusLabel } from "@/lib/domain/contracted-event";
+import { canManageCalendar } from "@/lib/domain/calendar";
 import { getBrazilHolidays, getCearaFortalezaHolidays, type CalendarHoliday } from "@/lib/holidays";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { CalendarEntryForm, DeleteCalendarEntryForm, type CalendarEntryForForm } from "./calendar-forms";
@@ -20,7 +21,7 @@ export default async function AgendaPage({ searchParams }: { searchParams: Promi
   const lastDay = new Date(selected.year, selected.month, 0).getDate();
   const lastDate = `${selected.year}-${pad(selected.month)}-${pad(lastDay)}`;
   const { supabase, permissions } = await requireUser();
-  const canManage = permissions.some((permission) => permission === "gerencia" || permission === "direcao" || permission === "admin_owner");
+  const canManage = canManageCalendar(permissions);
 
   const [{ data: events, error: eventError }, { data: entries, error: entryError }, nationalHolidays] = await Promise.all([
     supabase.from("contracted_events").select("id,title,status,event_date,event_type,leads(name)").gte("event_date", firstDate).lte("event_date", lastDate).neq("status", "cancelado").order("event_date"),
