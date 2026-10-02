@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { connectionCredential, MetaRequestError } from "@/lib/whatsapp-meta";
 import { sendWhatsAppTemplate, sendWhatsAppText } from "@/lib/whatsapp";
+import { canSendFreeWhatsApp, getWhatsAppWindow } from "@/lib/whatsapp-window";
 
 // Call only after authenticating an active attendant and reading the conversation through RLS.
 export async function sendHumanWhatsApp(input: { requestId: string; conversationId: string; actorId: string; body: string; phoneNumberId: string; to: string }) {
@@ -9,8 +10,11 @@ export async function sendHumanWhatsApp(input: { requestId: string; conversation
   const { data: inbound, error: inboundError } = await admin.from("conversation_messages").select("external_created_at")
     .eq("conversation_id", input.conversationId).eq("direction", "inbound").eq("message_origin", "whatsapp_cloud").eq("is_history", false)
     .not("external_message_id", "is", null).order("external_created_at", { ascending: false }).limit(1).maybeSingle();
-  const age = inbound?.external_created_at ? Date.now() - Date.parse(inbound.external_created_at) : Infinity;
-  if (inboundError || age < 0 || age >= 24 * 3600_000) throw new Error("A resposta livre pela API exige uma mensagem nova do cliente nas últimas 24 horas. Histórico importado e mensagens do celular não abrem essa janela.");
+  const window = getWhatsAppWindow(inbound?.external_created_at ?? null);
+  if (inboundError || !canSendFreeWhatsApp(window)) {
+    await admin.from("conversation_messages").insert({ conversation_id: input.conversationId, author: "sistema", actor_id: input.actorId, body: "Envio livre bloqueado: a janela de atendimento do WhatsApp está encerrada. Use um template aprovado para retomar o contato.", direction: "internal", message_origin: "sunrise", message_type: "system" });
+    throw new Error("A janela de atendimento do WhatsApp está encerrada. Use um template aprovado para retomar o contato.");
+  }
   const { error: reservationError } = await admin.from("conversation_messages").insert({ id: input.requestId, conversation_id: input.conversationId, actor_id: input.actorId, author: "humano", body: input.body, direction: "outbound", message_origin: "sunrise", message_type: "text", delivery_status: "pending" });
   if (reservationError) {
     if (reservationError.code !== "23505") throw new Error("Não foi possível registrar a tentativa. Nada foi enviado.");

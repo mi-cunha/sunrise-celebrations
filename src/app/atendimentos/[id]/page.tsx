@@ -140,6 +140,9 @@ export default async function ConversationDetailPage({ params, searchParams }: {
   const eventTypes = options?.filter((option) => option.kind === "event_type") ?? defaultEventTypes.map((name) => ({ name }));
   const leadSources = options?.filter((option) => option.kind === "lead_source") ?? defaultLeadSources.map((name) => ({ name }));
   const { data: responseTemplates } = await supabase.from("response_templates").select("title,body,category").eq("is_active", true).order("sort_order").order("title");
+  const { data: approvedTemplates } = detail.channel === "whatsapp_cloud"
+    ? await supabase.from("crm_message_templates").select("id,title,body,whatsapp_template_name").eq("channel", "whatsapp").eq("is_active", true).order("sort_order")
+    : { data: [] };
   const { data: staffRows } = canManage
     ? await supabase.from("profiles").select("id,display_name,is_active,user_permissions(permission)").eq("is_active", true).order("display_name")
     : { data: [] };
@@ -169,6 +172,7 @@ export default async function ConversationDetailPage({ params, searchParams }: {
   }));
   const messageRows = ([...importedRows, ...liveRows])
     .sort((left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime());
+  const lastInboundAt = [...liveRows].filter((message) => message.author === "cliente" && message.message_origin === "whatsapp_cloud").map((message) => message.created_at).sort().at(-1) ?? null;
   const isClosed = detail.status === "closed";
   const leadHistory = [...(detail.leads?.lead_history ?? [])].sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime()).slice(0, 6);
   const leadChecklist = buildLeadChecklist(detail.leads);
@@ -228,7 +232,7 @@ export default async function ConversationDetailPage({ params, searchParams }: {
 
           {canAssume && (
             <div className="mt-6 grid gap-4 xl:grid-cols-2">
-              <HumanReplyForm conversationId={id} disabled={isClosed} templates={responseTemplates ?? []} />
+              <HumanReplyForm conversationId={id} disabled={isClosed} templates={responseTemplates ?? []} approvedTemplates={approvedTemplates ?? []} lastInboundAt={lastInboundAt} whatsapp={detail.channel === "whatsapp_cloud"} />
               {detail.channel !== "whatsapp_cloud" && <CustomerMessageForm conversationId={id} disabled={isClosed} />}
             </div>
           )}

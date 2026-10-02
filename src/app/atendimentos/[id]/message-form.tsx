@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useActionState } from "react";
-import { addCustomerMessage, addHumanMessage, type ConversationFormState } from "../actions";
+import { addCustomerMessage, addHumanMessage, sendConversationTemplate, type ConversationFormState } from "../actions";
+import { canSendFreeWhatsApp, getWhatsAppWindow, whatsappWindowLabel, type WhatsAppWindow } from "@/lib/whatsapp-window";
 
 const initialState: ConversationFormState = {};
 
@@ -37,22 +38,49 @@ const categoryOrder = [
   "Outras respostas",
 ];
 
-export function HumanReplyForm({ conversationId, disabled = false, templates = [] }: { conversationId: string; disabled?: boolean; templates?: ResponseTemplate[] }) {
+type ApprovedTemplate = { id: string; title: string; body: string; whatsapp_template_name: string | null };
+
+export function HumanReplyForm({ conversationId, disabled = false, templates = [], approvedTemplates = [], lastInboundAt = null, whatsapp = false }: { conversationId: string; disabled?: boolean; templates?: ResponseTemplate[]; approvedTemplates?: ApprovedTemplate[]; lastInboundAt?: string | null; whatsapp?: boolean }) {
   const [state, action, pending] = useActionState(addHumanMessage, initialState);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(timer); }, []);
+  const windowState = getWhatsAppWindow(lastInboundAt, now);
+  const canSendFree = canSendFreeWhatsApp(windowState);
   return (
-    <ConversationMessageForm
+    <div className="space-y-3">
+      {whatsapp && <WhatsAppWindowBanner windowState={windowState} />}
+      {(!whatsapp || canSendFree) ? <ConversationMessageForm
       key={state.version ?? "human-initial"}
       action={action}
       conversationId={conversationId}
-      disabled={disabled || pending}
+      disabled={disabled || pending || !canSendFree}
       fieldLabel="Resposta do atendente"
       buttonLabel={pending ? "Enviando..." : "Enviar resposta humana"}
       helperText="Ao responder, o atendimento fica assumido por humano e a IA permanece pausada."
       state={state}
       variant="human"
       templates={templates}
-    />
+      /> : <ApprovedTemplateForm conversationId={conversationId} disabled={disabled} templates={approvedTemplates} />}
+    </div>
   );
+}
+
+function WhatsAppWindowBanner({ windowState }: { windowState: WhatsAppWindow }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(timer); }, []);
+  const current = getWhatsAppWindow(windowState.lastInboundAt, now);
+  const tone = current.state === "active" ? "bg-emerald-50 text-emerald-900" : current.state === "closing" ? "bg-amber-50 text-amber-900" : "bg-slate-100 text-slate-700";
+  const last = current.lastInboundAt ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(current.lastInboundAt)) : "—";
+  const expires = current.expiresAt ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(current.expiresAt)) : null;
+  const remaining = current.remainingMs > 0 ? `${Math.floor(current.remainingMs / 3_600_000)}h ${Math.floor((current.remainingMs % 3_600_000) / 60_000)}min` : null;
+  return <div role="status" className={`rounded-lg p-3 text-sm ${tone}`}><strong>◷ {whatsappWindowLabel(current)}</strong><p className="mt-1">{current.state === "expired" ? "Para retomar o contato, envie um template aprovado." : current.state === "not_started" ? "Use um template aprovado para iniciar o contato." : `${current.state === "closing" ? "A janela está próxima de encerrar. " : ""}Responda até ${expires} · faltam ${remaining}.`}</p><p className="mt-1 text-xs">Última mensagem do cliente: {last}</p></div>;
+}
+
+function ApprovedTemplateForm({ conversationId, disabled, templates }: { conversationId: string; disabled: boolean; templates: ApprovedTemplate[] }) {
+  const [state, action, pending] = useActionState(sendConversationTemplate, initialState);
+  const [templateId, setTemplateId] = useState(templates.find((template) => template.whatsapp_template_name)?.id ?? "");
+  const available = templates.filter((template) => template.whatsapp_template_name);
+  return <form action={(data) => { data.set("requestId", crypto.randomUUID()); action(data); }} className="rounded-xl border border-amber-300 bg-amber-50 p-4"><h2 className="font-semibold text-[#083653]">Usar template aprovado</h2><p className="mt-1 text-xs text-amber-900">Mensagens livres e documentos comuns ficam bloqueados até uma nova mensagem do cliente.</p><input type="hidden" name="conversationId" value={conversationId} /><div className="mt-3"><label htmlFor="approved-template">Template</label><select id="approved-template" name="templateId" value={templateId} onChange={(event) => setTemplateId(event.currentTarget.value)} disabled={disabled || pending}>{available.map((template) => <option key={template.id} value={template.id}>{template.title}</option>)}</select></div>{!available.length && <p className="mt-3 text-sm text-red-800">Não há template aprovado configurado. Peça a configuração em Mensagens do CRM.</p>}{state.error && <p role="alert" className="mt-3 text-sm text-red-800">{state.error}</p>}{state.success && <p role="status" className="mt-3 text-sm text-emerald-900">{state.success}</p>}<button type="submit" disabled={disabled || pending || !templateId} className="mt-3 rounded-lg bg-[#0f5f8f] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">{pending ? "Enviando..." : "Usar template"}</button></form>;
 }
 
 function ConversationMessageForm({

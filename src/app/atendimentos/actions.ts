@@ -5,7 +5,7 @@ import { z } from "zod";
 import { canAssumeConversation, canManageAiConversation, createConversationSchema, conversationMessageSchema, handoffSchema } from "@/lib/domain/conversation";
 import { leadSchema, leadStatuses } from "@/lib/domain/lead";
 import { requireLeadManager, requireUser } from "@/lib/auth";
-import { sendHumanWhatsApp } from "@/lib/whatsapp-outbound";
+import { sendCrmWhatsAppTemplate, sendHumanWhatsApp } from "@/lib/whatsapp-outbound";
 
 export type ConversationFormState = { error?: string; success?: string; fieldErrors?: Record<string, string[]>; values?: Record<string, string>; version?: number };
 export type LeadUpdateFormValues = Record<"leadId" | "conversationId" | "name" | "company" | "phone" | "source" | "eventType" | "desiredDate" | "guestCount" | "notes", string>;
@@ -233,6 +233,32 @@ export async function closeConversation(formData: FormData) {
   revalidatePath("/atendimentos");
   revalidatePath(`/atendimentos/${parsed.data.conversationId}`);
   redirect(`/atendimentos/${parsed.data.conversationId}`);
+}
+
+const templateMessageSchema = z.object({ conversationId: z.string().uuid(), templateId: z.string().uuid(), requestId: z.string().uuid() });
+
+export async function sendConversationTemplate(_: ConversationFormState, formData: FormData): Promise<ConversationFormState> {
+  const parsed = templateMessageSchema.safeParse({ conversationId: formData.get("conversationId"), templateId: formData.get("templateId"), requestId: formData.get("requestId") });
+  if (!parsed.success) return { error: "Recarregue a página antes de enviar o template.", version: Date.now() };
+  const { supabase, user } = await requireConversationAttendant();
+  const [{ data: conversation }, { data: template }] = await Promise.all([
+    supabase.from("conversations").select("id,lead_id,status,external_contact_id,external_phone_number_id").eq("id", parsed.data.conversationId).maybeSingle(),
+    supabase.from("crm_message_templates").select("id,title,body,whatsapp_template_name,whatsapp_template_language,is_active").eq("id", parsed.data.templateId).eq("channel", "whatsapp").maybeSingle(),
+  ]);
+  if (!conversation || conversation.status === "closed") return { error: "Este atendimento não está disponível para envio.", version: Date.now() };
+  if (!conversation.external_contact_id || !conversation.external_phone_number_id) return { error: "Este atendimento não possui conexão oficial do WhatsApp.", version: Date.now() };
+  if (!template?.is_active || !template.whatsapp_template_name) return { error: "O template aprovado selecionado não está configurado.", version: Date.now() };
+  const { data: lead } = await supabase.from("leads").select("name").eq("id", conversation.lead_id).maybeSingle();
+  const body = template.body.replaceAll("{{nome}}", lead?.name ?? "");
+  const { error: reserveError } = await supabase.from("conversation_messages").insert({ id: parsed.data.requestId, conversation_id: conversation.id, author: "humano", actor_id: user.id, body, direction: "outbound", message_origin: "sunrise", message_type: "template", delivery_status: "pending" });
+  if (reserveError) return { error: "Não foi possível registrar o envio do template.", version: Date.now() };
+  try {
+    await sendCrmWhatsAppTemplate({ messageId: parsed.data.requestId, conversationId: conversation.id, actorId: user.id, body, phoneNumberId: conversation.external_phone_number_id, to: conversation.external_contact_id, templateName: template.whatsapp_template_name, language: template.whatsapp_template_language ?? "pt_BR" });
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Não foi possível enviar o template.", version: Date.now() };
+  }
+  revalidatePath("/atendimentos"); revalidatePath(`/atendimentos/${conversation.id}`);
+  return { success: "Template aprovado enviado. Aguarde a resposta do cliente para retomar mensagens livres.", version: Date.now() };
 }
 
 export async function pauseAiConversation(formData: FormData) {
