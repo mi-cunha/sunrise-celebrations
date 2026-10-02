@@ -116,7 +116,7 @@ type ContractedEventSummary = {
   status: string;
 };
 
-export default async function QuotePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ statusError?: string; statusUpdated?: string }> }) {
+export default async function QuotePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ statusError?: string; statusUpdated?: string; agendaWarning?: string }> }) {
   if (!hasSupabaseConfig()) return <SetupNotice />;
   const { id } = await params;
   const statusFeedback = await searchParams;
@@ -181,6 +181,7 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
           {statusFeedback.statusUpdated === "aprovado" ? "Orçamento aprovado e evento incluído na agenda." : "Status do orçamento atualizado."}
         </p>
       )}
+      {statusFeedback.agendaWarning && <p role="alert" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{statusFeedback.agendaWarning}</p>}
 
       <FlowProgress steps={quoteFlowSteps({ status: detail.status, hasItems: items.length > 0 || Boolean(selectedPackage), hasEvent: Boolean(contractedEvent) })} />
 

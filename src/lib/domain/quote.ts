@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const quoteStatuses = ["rascunho", "em_elaboracao", "enviado", "aprovado", "recusado", "expirado"] as const;
+export const quoteStatuses = ["rascunho", "em_elaboracao", "enviado", "em_negociacao", "aprovado", "recusado", "cancelado", "expirado"] as const;
 export const quoteEventAreas = ["lado_esquerdo", "lado_direito", "praia", "casa_completa"] as const;
 
 export const quoteEventAreaSchema = z.object({
@@ -88,8 +88,10 @@ export function quoteStatusLabel(status: string) {
     rascunho: "Rascunho",
     em_elaboracao: "Em elaboração",
     enviado: "Enviado",
+    em_negociacao: "Em negociação",
     aprovado: "Aprovado",
     recusado: "Recusado",
+    cancelado: "Cancelado",
     expirado: "Expirado",
   };
   return labels[status] ?? status;

@@ -14,6 +14,7 @@ export type QuoteFormState = {
   values?: Record<string, string>;
   version?: number;
   requiresDateConflictConfirmation?: boolean;
+  warning?: string;
 };
 
 export async function updateQuoteEventSchedule(_: QuoteFormState, formData: FormData): Promise<QuoteFormState> {
@@ -42,6 +43,7 @@ export async function updateQuoteEventSchedule(_: QuoteFormState, formData: Form
   revalidatePath(`/orcamentos/${id.data}`);
   revalidatePath(`/orcamentos/${id.data}/proposta`);
   revalidatePath("/painel");
+  revalidatePath("/agenda");
   return { success: "Data, horário e duração atualizados.", version: Date.now() };
 }
 
@@ -249,6 +251,7 @@ export async function updateQuoteStatus(_: QuoteFormState, formData: FormData): 
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Selecione um status válido.", values: { reason: String(formData.get("reason") ?? "") }, version: Date.now() };
 
   const { supabase } = await requireQuoteManager();
+  let calendarWarning: string | undefined;
   if (parsed.data.status === "aprovado") {
     const { data: quote, error: quoteError } = await supabase
       .from("quotes")
@@ -259,6 +262,11 @@ export async function updateQuoteStatus(_: QuoteFormState, formData: FormData): 
 
     const approvalIssue = getQuoteApprovalIssue(quote as unknown as QuoteApprovalData | null);
     if (approvalIssue) return { error: approvalIssue, values: { reason: parsed.data.reason ?? "" }, version: Date.now() };
+
+    const { data: preReservations } = await supabase.rpc("get_quote_pre_reservation_conflicts", { p_quote_id: parsed.data.quoteId });
+    if (preReservations && preReservations.length > 0) {
+      calendarWarning = `Há ${preReservations.length === 1 ? "uma pré-reserva" : `${preReservations.length} pré-reservas`} em negociação nesta data: ${preReservations.map((item: { client_name: string }) => item.client_name).join(", ")}. O evento foi mantido e nenhuma negociação foi bloqueada.`;
+    }
 
     const { data: approvalResult, error: approvalError } = await supabase.rpc("approve_quote_and_create_event", {
       p_quote_id: parsed.data.quoteId,
@@ -322,12 +330,22 @@ export async function updateQuoteStatus(_: QuoteFormState, formData: FormData): 
     };
   }
 
+  let negotiationWarning: string | undefined;
+  if (parsed.data.status === "em_negociacao") {
+    const { data: conflicts, error: conflictError } = await supabase.rpc("get_quote_negotiation_conflicts", { p_quote_id: parsed.data.quoteId });
+    if (!conflictError && conflicts && conflicts.length > 0) {
+      const names = conflicts.map((conflict: { title: string; client_name: string }) => `${conflict.client_name} (${conflict.title})`).join(", ");
+      negotiationWarning = `Atenção: já há evento confirmado nesta data: ${names}. A proposta continua em negociação e a data não foi bloqueada.`;
+    }
+  }
+
   revalidatePath(`/orcamentos/${parsed.data.quoteId}`);
   revalidatePath("/painel");
   revalidatePath("/atendimentos");
   revalidatePath("/eventos");
   revalidatePath("/agenda");
-  redirect(`/orcamentos/${parsed.data.quoteId}?statusUpdated=${parsed.data.status}`);
+  const warning = negotiationWarning ?? calendarWarning;
+  redirect(`/orcamentos/${parsed.data.quoteId}?statusUpdated=${parsed.data.status}${warning ? `&agendaWarning=${encodeURIComponent(warning)}` : ""}`);
 }
 
 type AtomicQuoteApprovalResult = {
