@@ -5,6 +5,10 @@ import { z } from "zod";
 import { parseCurrencyToCents } from "@/lib/domain/quote";
 import { requireUser } from "@/lib/auth";
 
+function canManagePackages(permissions: readonly string[]) {
+  return permissions.some((permission) => ["atendimento", "gerencia", "direcao", "admin_owner"].includes(permission));
+}
+
 const optionSchema = z.object({
   kind: z.enum(["event_type", "lead_source"]),
   name: z.string().trim().min(2, "Informe uma opção.").max(80, "Use até 80 caracteres."),
@@ -274,7 +278,7 @@ export async function createEventPackage(_: PackageCatalogFormState, formData: F
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revise o pacote.", ...raw };
 
   const { supabase, permissions } = await requireUser();
-  if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
+  if (!canManagePackages(permissions)) redirect("/painel?error=forbidden");
 
   const primaryEventType = parsed.data.eventTypes[0];
   const { error } = await supabase.from("event_package_catalog").insert({
@@ -298,7 +302,7 @@ export async function updateEventPackage(_: PackageCatalogFormState, formData: F
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revise o pacote.", ...raw };
 
   const { supabase, permissions } = await requireUser();
-  if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
+  if (!canManagePackages(permissions)) redirect("/painel?error=forbidden");
 
   const primaryEventType = parsed.data.eventTypes[0];
   const { error } = await supabase
@@ -367,7 +371,7 @@ export async function createEventPackageItem(_: PackageItemFormState, formData: 
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revise o item do pacote.", packageId: raw.packageId, category: raw.category, name: raw.name, description: raw.description, isChoice: raw.isChoice ? "on" : "", choiceGroup: raw.choiceGroup, choiceMin: raw.choiceMin, choiceMax: raw.choiceMax };
 
   const { supabase, permissions } = await requireUser();
-  if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
+  if (!canManagePackages(permissions)) redirect("/painel?error=forbidden");
 
   const { data: sortOrder } = await supabase.rpc("next_event_package_item_sort_order", { p_package_id: parsed.data.packageId });
   const { error } = await supabase.from("event_package_items").insert({
@@ -407,7 +411,7 @@ export async function updateEventPackageItem(_: PackageItemFormState, formData: 
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revise o item do pacote.", packageId: raw.packageId, category: raw.category, name: raw.name, description: raw.description, isChoice: raw.isChoice ? "on" : "", choiceGroup: raw.choiceGroup, choiceMin: raw.choiceMin, choiceMax: raw.choiceMax };
 
   const { supabase, permissions } = await requireUser();
-  if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
+  if (!canManagePackages(permissions)) redirect("/painel?error=forbidden");
 
   const { error } = await supabase
     .from("event_package_items")
@@ -456,7 +460,7 @@ export async function createPackageSubcategory(_: PackageModelFormState, formDat
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revise a subcategoria.", ...raw };
 
   const { supabase, permissions } = await requireUser();
-  if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
+  if (!canManagePackages(permissions)) redirect("/painel?error=forbidden");
 
   const { error } = await supabase.from("event_package_subcategories").insert({
     category: parsed.data.category,
@@ -482,7 +486,7 @@ export async function createPackageLibraryItem(_: PackageModelFormState, formDat
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revise o item.", subcategoryId: raw.subcategoryId, name: raw.name, proposalDescription: raw.proposalDescription, operationalDescription: raw.operationalDescription };
 
   const { supabase, permissions } = await requireUser();
-  if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
+  if (!canManagePackages(permissions)) redirect("/painel?error=forbidden");
 
   const { error } = await supabase.from("event_package_item_catalog").insert({
     subcategory_id: parsed.data.subcategoryId,
@@ -509,7 +513,7 @@ export async function updatePackageSubcategory(_: PackageModelFormState, formDat
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revise a subcategoria.", ...raw };
 
   const { supabase, permissions } = await requireUser();
-  if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
+  if (!canManagePackages(permissions)) redirect("/painel?error=forbidden");
 
   const { data: previous, error: previousError } = await supabase
     .from("event_package_subcategories")
@@ -595,7 +599,7 @@ export async function updatePackageLibraryItem(_: PackageModelFormState, formDat
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revise o item.", ...raw };
 
   const { supabase, permissions } = await requireUser();
-  if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
+  if (!canManagePackages(permissions)) redirect("/painel?error=forbidden");
 
   const { error } = await supabase
     .from("event_package_item_catalog")
@@ -648,7 +652,7 @@ export async function createPackageRule(_: PackageModelFormState, formData: Form
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revise a regra do pacote.", packageId: raw.packageId, subcategoryId: raw.subcategoryId, title: raw.title, selectionMin: raw.selectionMin, selectionMax: raw.selectionMax };
 
   const { supabase, permissions } = await requireUser();
-  if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
+  if (!canManagePackages(permissions)) redirect("/painel?error=forbidden");
 
   if (parsed.data.itemIds.length > 0) {
     const { count, error: itemCheckError } = await supabase
@@ -747,7 +751,7 @@ export async function attachPackageRuleItem(_: PackageModelFormState, formData: 
   if (!parsed.success) return { error: "Selecione regra e item.", ruleId: raw.ruleId, itemId: raw.itemId };
 
   const { supabase, permissions } = await requireUser();
-  if (!permissions.includes("admin_owner")) redirect("/painel?error=forbidden");
+  if (!canManagePackages(permissions)) redirect("/painel?error=forbidden");
 
   const { data: rule } = await supabase.from("event_package_rules").select("subcategory_id").eq("id", parsed.data.ruleId).maybeSingle();
   const { data: item } = await supabase.from("event_package_item_catalog").select("subcategory_id").eq("id", parsed.data.itemId).maybeSingle();

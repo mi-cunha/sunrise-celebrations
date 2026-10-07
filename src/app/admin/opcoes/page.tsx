@@ -55,7 +55,9 @@ export default async function OptionsAdminPage() {
   if (!hasSupabaseConfig()) return <SetupNotice />;
 
   const { supabase, permissions } = await requireUser();
-  if (!permissions.includes("admin_owner")) {
+  const canManagePackages = permissions.some((permission) => ["atendimento", "gerencia", "direcao", "admin_owner"].includes(permission));
+  const isAdmin = permissions.includes("admin_owner");
+  if (!canManagePackages) {
     return (
       <AppShell title="Acesso restrito">
         <p className="mt-3 text-sm text-[#5f7180]">Apenas administradores podem gerenciar configurações.</p>
@@ -112,7 +114,7 @@ export default async function OptionsAdminPage() {
       {error && <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-[#b54747]">Tabela de opções indisponível. Confira as migrations.</p>}
 
       <div className="mt-4 space-y-2">
-        <AdminSection id="whatsapp" title="WhatsApp Business" count={whatsappConnection?.status === "connected" ? 1 : 0}>
+        {isAdmin && <AdminSection id="whatsapp" title="WhatsApp Business" count={whatsappConnection?.status === "connected" ? 1 : 0}>
           <WhatsAppConnectionPanel
             appId={process.env.NEXT_PUBLIC_META_APP_ID ?? ""}
             configId={process.env.NEXT_PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID ?? ""}
@@ -122,26 +124,26 @@ export default async function OptionsAdminPage() {
           <div className="mt-4 border-t border-[#d9ded8] pt-4">
             <Link href="/admin/whatsapp-avaliacao" className="text-sm font-semibold text-[#0f5f8f] underline">Abrir demonstração para análise da Meta (número de teste)</Link>
           </div>
-        </AdminSection>
+        </AdminSection>}
 
-        <AdminSection id="opcoes" title="Tipos de evento" count={eventTypes.length}>
+        {isAdmin && <AdminSection id="opcoes" title="Tipos de evento" count={eventTypes.length}>
           <OptionForm kind="event_type" label="Novo tipo" />
           <OptionAccordionList options={eventTypes} />
-        </AdminSection>
+        </AdminSection>}
 
-        <AdminSection title="Origens" count={leadSources.length}>
+        {isAdmin && <AdminSection title="Origens" count={leadSources.length}>
           <OptionForm kind="lead_source" label="Nova origem" />
           <OptionAccordionList options={leadSources} />
-        </AdminSection>
+        </AdminSection>}
 
-        <AdminSection title="Marca" count={companySettings?.logo_url ? 1 : 0}>
+        {isAdmin && <AdminSection title="Marca" count={companySettings?.logo_url ? 1 : 0}>
           <CompanyLogoForm logoUrl={companySettings?.logo_url ?? ""} />
-        </AdminSection>
+        </AdminSection>}
 
-        <AdminSection title="Itens de orçamento" count={(quoteItemOptions ?? []).length}>
+        {isAdmin && <AdminSection title="Itens de orçamento" count={(quoteItemOptions ?? []).length}>
           <QuoteItemCatalogOptionForm />
           <QuoteItemCatalogAccordionList options={(quoteItemOptions ?? []) as QuoteItemCatalogOption[]} />
-        </AdminSection>
+        </AdminSection>}
 
         <AdminSection id="pacotes" title="Pacotes" count={(eventPackages ?? []).length} defaultOpen>
           <p className="mb-4 text-sm text-slate-600">Crie um pacote, defina o valor e inclua seus itens. Para reutilizar itens ou oferecer escolhas, use a biblioteca dentro do mesmo pacote.</p>
@@ -156,10 +158,10 @@ export default async function OptionsAdminPage() {
           </details>
         </AdminSection>
 
-        <AdminSection title="Textos da proposta" count={(proposalOptions ?? []).length}>
+        {isAdmin && <AdminSection title="Textos da proposta" count={(proposalOptions ?? []).length}>
           <ProposalOptionForm />
           <ProposalOptionAccordionList options={(proposalOptions ?? []) as ProposalOption[]} />
-        </AdminSection>
+        </AdminSection>}
       </div>
     </AppShell>
   );
